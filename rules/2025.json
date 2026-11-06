@@ -1,0 +1,16 @@
+{
+  "gads": 2025,
+  "avots": "VID metodiskie materiāli; pārbaudīts ar 2025. gada pašnodarbinātā ziņojumiem un GID",
+  "minimalaAlga": 740,
+  "vsaoiLikme": 31.07,
+  "pensijuLikme": 10,
+  "iinLikme": 25.5,
+  "iinSlieksnis": 105300,
+  "iinAugstaLikme": 33,
+  "neapliekamaisMinimumsMenesi": 510,
+  "dzivibasApdrosinasanaMaxDala": 10,
+  "attaisnotieMaxPersonai": 600,
+  "iinVienaMaksajumaRobeza": 640,
+  "d3Rindas": { "ienemumi": "5", "izdevumi": "6", "apliekamie": "8" },
+  "dRindas": { "apliekamie": "1", "vsaoi": "6", "attaisnotie": "8", "dzivibasApdr": "9", "attaisnotieKopa": "10", "neapliekamais": "11", "nodoklis": "18", "citiNodokli": "19", "ieturetais": "23", "maksajams": "24", "parmaksa": "25" }
+}
