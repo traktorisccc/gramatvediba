@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grāmatvedība</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,600&family=Public+Sans:wght@400;500;600;700&display=swap&subset=latin-ext" rel="stylesheet">
+<style>
+:root{--bg:#F1F3EF;--surface:#fff;--ink:#1B2433;--muted:#5D6574;--line:#D3D8D0;--field:#F7F8F5;--mark:#F3DC3C;--good:#2C6B5A;--warn:#9A3B26;
+ --serif:"Newsreader",Georgia,serif;--sans:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color-scheme:light;
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181E;--surface:#1C222B;--ink:#E5E8EC;--muted:#9AA2AE;--line:#2F3743;--field:#232A34;--mark:#D8C230;--good:#6FC2A6;--warn:#E88C72;color-scheme:dark}}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 18px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:24px 0 14px;border-bottom:2px solid var(--ink)}
+h1{font:600 2.2rem/1.05 var(--serif);margin:0}h1 small{display:block;font:400 .88rem var(--sans);color:var(--muted);margin-top:6px}
+nav{display:flex;gap:2px;overflow-x:auto;padding:10px 0;margin-bottom:22px;border-bottom:1px solid var(--line);scrollbar-width:none}
+nav a{flex:none;padding:8px 12px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500;font-size:.95rem}
+nav a:hover{color:var(--ink);background:var(--field)}nav a[aria-current=page]{color:var(--ink);background:var(--surface);box-shadow:inset 0 -3px 0 var(--mark)}
+h2{font:600 1.6rem/1.15 var(--serif);margin:0 0 6px}h3{font-size:1rem;margin:22px 0 10px}
+.lead{color:var(--muted);margin:0 0 18px;max-width:72ch}.note{color:var(--muted);font-size:.9rem;max-width:76ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.84rem;font-weight:600;color:var(--muted)}
+label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-weight:500}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:40px;width:100%}
+label.check input{width:auto;min-height:0}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;min-height:40px}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}button.link{border:0;background:none;color:var(--muted);padding:4px 6px;min-height:0;font-weight:500}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:.93rem}th,td{padding:8px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.82rem;color:var(--muted);background:var(--field);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}td.wrap{min-width:180px}
+.eds th{background:#e7eaf0;color:#1b2433}.eds td.c{cursor:copy}.eds td.c:hover{background:var(--field)}
+.big{font:600 2.4rem/1.1 var(--serif);font-variant-numeric:tabular-nums}
+.hl{background:linear-gradient(transparent 55%,var(--mark) 55%);padding:0 2px}
+.tag{display:inline-block;font-size:.76rem;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.tag.ok{border-color:var(--good);color:var(--good)}.tag.warn{border-color:var(--warn);color:var(--warn)}
+.banner{border-left:6px solid var(--mark);background:var(--surface);padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:.92rem}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.poz{display:grid;grid-template-columns:1fr 90px 120px auto;gap:8px;align-items:end;margin-bottom:8px}
+@media (max-width:600px){h1{font-size:1.8rem}.poz{grid-template-columns:1fr 1fr}.poz label:first-child{grid-column:1/-1}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>Grāmatvedība<small>Autoratlīdzības, rēķini un nodokļi saimnieciskās darbības veicējam</small></h1></header>
+<nav id="nav">
+<a href="#parskats">Pārskats</a><a href="#rekini">Rēķini</a><a href="#ligumi">Autorlīgumi</a><a href="#banka">Banka</a>
+<a href="#ceturksnis">Ceturkšņa ziņojums</a><a href="#deklaracija">Gada deklarācija</a><a href="#iestatijumi">Iestatījumi</a>
+</nav>
+<div class="banner">Dati pagaidām glabājas tikai šajā pārlūkā. Regulāri lejupielādē rezerves kopiju sadaļā „Iestatījumi”. Google Drive savienojums būs nākamajā posmā.</div>
+<main id="view"><p class="note">Ielādē…</p></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
