@@ -19,6 +19,7 @@ Rīks nav nodokļu konsultants un neko neiesniedz EDS.
 - `src/drive.js` — Google Drive savienojums: pieslēgšanās (Google Identity Services), mapes un faili. Piekļuve tikai `drive.file`, piekļuves atslēga tikai atmiņā.
 - `src/sinhronizacija.js` — sinhronizācija starp pārlūku un Drive: konfliktu atpazīšana pēc faila versijas, ikdienas rezerves kopija Drive, viena konta slēdzene.
 - `privatums.html` — privātuma politika (Google prasa publicētai lietotnei).
+- `src/hanzas.js` — Hanzas Perons Excel blankas aizpildīšana (.xlsx lasīšana un rakstīšana pārlūkā, lauki tiek atrasti pēc uzrakstiem).
 - `src/parskats.js`, `src/xlsx.js` — gada pārskats grāmatvedim Excel formātā (ar formulām), bez ārējām bibliotēkām.
 - `tests/` — publiskie testi ar VID piemēriem un izdomātiem datiem.
 

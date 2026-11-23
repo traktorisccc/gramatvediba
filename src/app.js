@@ -9,6 +9,7 @@ import { gadaParskats, VID_MAKSAJUMS } from './parskats.js';
 import { ieladet, saglabat, eksportet, importet, TUKSI_DATI } from './glabatuve.js';
 import * as drive from './drive.js';
 import { izveidotSinhronizatoru } from './sinhronizacija.js';
+import { parbauditBlanku, aizpilditBlanku, blankasFailaVards } from './hanzas.js';
 
 // ---------- Pamata palīgi ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -326,12 +327,13 @@ function skatsRekini(v) {
     const tags = st.pilniba ? `<span class="tag ok">${r.samaksatsCitur && !st.samaksats ? 'apmaksāts citā kontā' : 'apmaksāts'}</span>` : st.daleji ? `<span class="tag warn">daļēji, atlikums ${naudaLv(st.atlikums)}</span>` : r.termins < sodien() ? '<span class="tag warn">kavēts</span>' : '<span class="tag">gaida</span>';
     return `<tr><td>${h(rekinaNumursTeksts(r.nr, p.veidne))}</td><td>${datumsLv(r.datums)}</td><td class="wrap">${h(p.nosaukums)}${p.budzetaIestade ? ' <span class="tag">budžeta iestāde</span>' : ''}</td>
     <td class="n">${naudaLv(st.kopa)}</td><td>${tags}</td>
-    <td><div class="row"><button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button><button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
+    <td><div class="row">${p.veidne === 'hanzas' ? `<button class="link" data-hanzas="${r.id}">Excel</button>` : `<button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button>`}<button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
   </tbody></table></div>`;
   const atrast = (id) => dati.rekini.find((r) => r.id === id);
   if ($('#jauns')) $('#jauns').onclick = () => { rekinaForma = { pozicijas: [{ nosaukums: '', daudzums: 1, cena: '' }] }; radit(); };
   $$('[data-pdf]').forEach((b) => b.onclick = () => atvertPdf(atrast(b.dataset.pdf)));
   $$('[data-xml]').forEach((b) => b.onclick = () => lejupieladetXml(atrast(b.dataset.xml)));
+  $$('[data-hanzas]').forEach((b) => b.onclick = () => lejupieladetHanzas(atrast(b.dataset.hanzas)));
   $$('[data-labot]').forEach((b) => b.onclick = () => { const r = atrast(b.dataset.labot); rekinaForma = { ...r, labo: r.id, pozicijas: r.pozicijas.map((p) => ({ ...p })) }; radit(); window.scrollTo({ top: 0 }); });
   $$('[data-dzest]').forEach((b) => b.onclick = () => {
     const r = atrast(b.dataset.dzest), pedejais = r.nr === dati.profils.nakamaisNr - 1;
@@ -378,12 +380,14 @@ function piesaistitRedaktoru() {
     const poz = pozicijas();
     if (poz.some((p) => !p.nosaukums || p.cena <= 0)) { toast('Katrai pozīcijai vajag nosaukumu un cenu'); return; }
     const pasId = nolasitPasutitaju(form); if (!pasId) return;
+    if (pasutitajs(pasId).veidne === 'hanzas' && dati.hanzasBlanka?.pozicijuRindas && poz.length > dati.hanzasBlanka.pozicijuRindas) {
+      toast(`Hanzas Perons blankā ir vieta ${dati.hanzasBlanka.pozicijuRindas} pozīcijai. Apvieno pozīcijas vienā.`); return; }
     const lauki = { datums: form.datums.value, termins: form.termins.value, pasutitajsId: pasId, valoda: form.valoda.value, ligumaNr: form.ligumaNr.value.trim(),
       periods: form.no.value && form.lidz.value ? { no: form.no.value, lidz: form.lidz.value } : null, veids: form.veids.value, pozicijas: poz };
     const p = pasutitajs(pasId);
     if (rekinaForma.labo) { Object.assign(dati.rekini.find((r) => r.id === rekinaForma.labo), lauki); rekinaForma = null; saglabatUnRadit('Izmaiņas saglabātas'); return; }
     dati.rekini.push({ id: uid(), nr: dati.profils.nakamaisNr, ...lauki }); dati.profils.nakamaisNr += 1; rekinaForma = null;
-    saglabatUnRadit(p.veidne === 'hanzas' ? 'Rēķins saglabāts. Hanzas Perons Excel blanka būs 3. posmā, pagaidām lieto PDF.'
+    saglabatUnRadit(p.veidne === 'hanzas' ? 'Rēķins saglabāts. Lejupielādē to ar pogu „Excel”.'
       : p.budzetaIestade ? 'Rēķins saglabāts. Budžeta iestādei sūti e-rēķinu (XML) caur e-adresi.' : 'Rēķins saglabāts');
   };
 }
@@ -400,6 +404,17 @@ function lejupieladetXml(r) {
     pircejs: { nosaukums: p.nosaukums, regNr: p.regNr, adrese: p.adrese, epasts: p.epasts }, pozicijas: r.pozicijas, iban: pr.iban, bic: pr.bic });
   lejupieladet(`e-rekins-${nr}.xml`, xml, 'application/xml');
   if (p.budzetaIestade) toast('Augšupielādē šo XML latvija.lv e-adreses e-rēķinu formā: tad dati VID nonāk automātiski.');
+}
+
+const uzBase64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+const noBase64 = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+async function lejupieladetHanzas(r) {
+  if (!dati.hanzasBlanka?.fails) { toast('Vispirms ielādē Hanzas Perons blanku sadaļā „Iestatījumi”.'); location.hash = '#iestatijumi'; return; }
+  try {
+    const x = await aizpilditBlanku(noBase64(dati.hanzasBlanka.fails), r, dati.profils);
+    lejupieladet(blankasFailaVards(dati.profils.vards, r.datums, r.nr), x, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    toast('Hanzas Perons rēķins lejupielādēts');
+  } catch (e) { toast(e.message); }
 }
 
 // ---------- Autorlīgumi ----------
@@ -630,6 +645,11 @@ function skatsIestatijumi(v) {
     <td><input type="checkbox" data-budz="${x.id}" ${x.budzetaIestade ? 'checked' : ''} style="width:auto;min-height:0"></td>
     <td>${dati.rekini.some((r) => r.pasutitajsId === x.id) || dati.autorligumi.some((l) => l.pasutitajsId === x.id) ? '' : `<button class="link" data-dz="${x.id}">Dzēst</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="note">Pasūtītājus pievieno, izrakstot rēķinu.</td></tr>'}
   </tbody></table></div>
+  <h3>Hanzas Perons rēķina blanka</h3><div class="panel">
+    <p style="margin-top:0">${dati.hanzasBlanka?.fails ? `Ielādēta blanka „${h(dati.hanzasBlanka.nosaukums)}” (${datumsLv(dati.hanzasBlanka.ieladeta)}). Rīks to aizpilda katram Hanzas Perons rēķinam: numuru, datumus, periodu, pozīciju, summas un summu vārdiem. Noformējums un pasūtītāja dati paliek kā blankā.`
+      : 'Ielādē vienu no saviem Hanzas Perons rēķiniem Excel formātā (.xlsx). Rīks to izmantos kā blanku. Ja tev ir .xls fails, atver to Excel vai Numbers un saglabā kā .xlsx.'}</p>
+    <div class="row"><label class="check" style="cursor:pointer"><span style="border:1px solid var(--line);border-radius:6px;padding:8px 14px;font-weight:600;background:var(--surface)">${dati.hanzasBlanka?.fails ? 'Nomainīt blanku' : 'Izvēlēties .xlsx failu'}</span><input type="file" id="hanzasBlanka" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div>
+    <p class="note">Pasūtītājam jābūt atzīmētam ar veidni „Hanzas Perons” tabulā augstāk.</p></div>
   <h3>Google Drive</h3><div class="panel">${driveMeta().konts ? `<p style="margin-top:0">Pieslēgts kontam <b>${h(driveMeta().konts)}</b>. Dati glabājas Google Drive mapē „${drive.SAKNES_MAPE}” un šajā pārlūkā. Pirms datu pārrakstīšanas Drive katru dienu tiek saglabāta rezerves kopija mapē „${drive.REZERVJU_MAPE}”.</p>
     <div class="row"><button id="drSinh">Sinhronizēt tagad</button></div>`
     : `<p style="margin-top:0">Pieslēdz Google Drive, lai dati būtu drošībā un pieejami arī citās ierīcēs. Rīks redzēs tikai paša izveidotos failus.</p><div class="row"><button id="drSinh" class="primary">Pieslēgt Google Drive</button></div>`}
@@ -660,6 +680,15 @@ function skatsIestatijumi(v) {
     rakstitDriveMeta({}); drive.aizmirstAtslegu(); driveKluda = '';            // vispirms atvieno, lai tukšie dati netiktu augšupielādēti
     try { localStorage.removeItem('gramatvediba:dati-pirms-drive'); } catch { /* nav svarīgi */ }
     dati = TUKSI_DATI(); bankasSesija = null; saglabatSesiju(); saglabatUnRadit('Dati dzēsti no šī pārlūka');
+  };
+  $('#hanzasBlanka').onchange = async (e) => {
+    const fl = e.target.files[0]; if (!fl) return;
+    try {
+      const baiti = new Uint8Array(await fl.arrayBuffer()), p = await parbauditBlanku(baiti);
+      if (!p.ok) { toast(`Šī neizskatās pēc Hanzas Perons blankas: nav atrasts ${p.kludas.join(', ')}.`); return; }
+      dati.hanzasBlanka = { fails: uzBase64(baiti), nosaukums: fl.name, ieladeta: sodien(), pozicijuRindas: p.pozicijuRindas };
+      saglabatUnRadit('Blanka ielādēta');
+    } catch (err) { toast(err.message); }
   };
   if ($('#drSinh')) $('#drSinh').onclick = () => drive.irAtslega() ? izpilditSinh(() => sinh.sinhronizet()).then(radit) : pieslegtDrive().then(radit);
 }
