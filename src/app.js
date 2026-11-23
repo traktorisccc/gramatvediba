@@ -5,6 +5,7 @@ import { nolasitSwedbankCsv, klasificet, normalizetNosaukumu } from './banka.js'
 import { eRekinsXml } from './eRekins.js';
 import { rekinsHtml, rekinaKopsumma, rekinaNumursTeksts, rekinaNumursId, naudaLv, datumsLv } from './rekinsHtml.js';
 import { sadalitRekvizitus } from './rekviziti.js';
+import { gadaParskats, VID_MAKSAJUMS } from './parskats.js';
 import { ieladet, saglabat, eksportet, importet, TUKSI_DATI } from './glabatuve.js';
 
 // ---------- Pamata palīgi ----------
@@ -24,10 +25,26 @@ const KATEGORIJAS = {
   'kartes-atgriesana': 'Kartes darījuma atgriešana', procenti: 'Procenti', personigs: 'Personīgs pārskaitījums', 'savs-konts': 'No sava konta', jaizverte: '— jāizvērtē —'
 };
 const AR_SAITI = new Set(['sd', 'nodokli-samaksaja-izmaksatajs']);   // kategorijas, kurām var būt rēķins vai līgums
+// Ar darbību nesaistīti ienākošie maksājumi: pārskatā grāmatvedim tikai kopsumma, bez detaļām.
+const NESAISTITAS = new Set(['personigs', 'savs-konts', 'kartes-atgriesana', 'procenti']);
 
 let dati = ieladet();
 const noteikumi = {};
-let bankasSesija = null;
+// Neapstiprinātais izraksts glabājas pārlūkā, lai nepazustu pēc lapas pārlādēšanas.
+const SESIJAS_ATSLEGA = 'gramatvediba:banka-sesija';
+function ieladetSesiju() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESIJAS_ATSLEGA) || 'null');
+    if (!s?.rindas) return null;
+    const zinami = new Set(dati.darijumi.map((d) => d.arhivaKods));      // jau apstiprinātie vairs nav jārāda
+    s.rindas = s.rindas.filter((r) => !zinami.has(r.arhivaKods));
+    return s.rindas.length ? { ...s, atjaunots: true } : null;
+  } catch { return null; }
+}
+function saglabatSesiju() {
+  try { bankasSesija ? localStorage.setItem(SESIJAS_ATSLEGA, JSON.stringify(bankasSesija)) : localStorage.removeItem(SESIJAS_ATSLEGA); } catch { /* nav vietas: sesija paliek tikai atmiņā */ }
+}
+let bankasSesija = ieladetSesiju();
 let kess = {};                                                     // aprēķinu kešs vienam zīmējumam
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
@@ -103,6 +120,34 @@ function nodokluAtlikums(gads) {
   const a = gadaAprekins(gads);
   const samaksats = r2(dati.darijumi.filter((d) => d.kategorija === 'vid-maksajums' && nodokluGads(d) === gads).reduce((s, d) => s + d.summa, 0));
   return { a, samaksats, saistibas: r2(a.vsaoi + a.d.r24), atlikums: r2(Math.max(0, a.vsaoi + a.d.r24 - samaksats)) };
+}
+
+/** Excel pārskats grāmatvedim par gadu: žurnāls, ceturkšņi, deklarācija, banka, rēķini un noteikumi ar formulām. */
+function lejupieladetParskatu(gads) {
+  const { n, provizoriski } = gadaNoteikumi(gads), g = dati.gadi[gads] || {};
+  const piesaiste = (d) => { const r = rekinsPecSaites(d.saite), l = ligumsPecSaites(d.saite);
+    return r ? `Rēķins ${rekinaNumursTeksts(r.nr, pasutitajs(r.pasutitajsId).veidne)}` : l ? `Līgums ${l.nr}` : ''; };
+  const gadaDarijumi = dati.darijumi.filter((d) => gadsNo(d.datums) === gads || (d.kategorija === 'vid-maksajums' && nodokluGads(d) === gads));
+  const nesaistits = (d) => NESAISTITAS.has(d.kategorija) && d.virziens !== 'D';
+  const nesaistiti = r2(gadaDarijumi.filter(nesaistits).reduce((a, d) => a + d.summa, 0));
+  const darijumi = gadaDarijumi.filter((d) => !nesaistits(d)).map((d) => ({
+    datums: d.datums, partneris: d.partneris, info: d.info, virziens: d.virziens, summa: d.summa,
+    kategorija: d.kategorija === 'vid-maksajums' ? VID_MAKSAJUMS : (KATEGORIJAS[d.kategorija] || d.kategorija), aprekina: d.kategorija === 'sd',
+    piesaiste: piesaiste(d), nodokluGads: d.kategorija === 'vid-maksajums' ? nodokluGads(d) : '', avots: d.arRoku ? 'ievadīts ar roku' : 'bankas izraksts' }));
+  const rekini = dati.rekini.filter((r) => gadsNo(r.datums) === gads).sort((a, b) => a.nr - b.nr).map((r) => {
+    const st = rekinaStatuss(r);
+    return { numurs: rekinaNumursTeksts(r.nr, pasutitajs(r.pasutitajsId).veidne), datums: r.datums, pasutitajs: pasutitajs(r.pasutitajsId).nosaukums, veids: r.veids,
+      summa: st.kopa, samaksats: r.samaksatsCitur && !st.samaksats ? st.kopa : st.samaksats,
+      statuss: st.pilniba ? (r.samaksatsCitur && !st.samaksats ? `samaksāts citā kontā ${datumsLv(r.samaksatsCitur.datums)}` : 'apmaksāts') : st.daleji ? 'daļēji apmaksāts' : 'nav apmaksāts' };
+  });
+  const ligumi = dati.autorligumi.filter((a) => gadsNo(a.datums || '0000') === gads || dati.darijumi.some((d) => ligumsPecSaites(d.saite) === a && gadsNo(d.datums) === gads))
+    .map((a) => ({ nr: a.nr, datums: a.datums, pasutitajs: pasutitajs(a.pasutitajsId).nosaukums, veids: a.veids, summa: a.summa, samaksats: samaksatsLigumam(a), ietur: a.izmaksatajsIetur }));
+  const ieraksti = sdIeraksti().filter((e) => gadsNo(e.datums) === gads).map((e) => ({ datums: e.datums, partneris: e.partneris, info: e.info, veids: e.veids, summa: e.summa }));
+  const fails = gadaParskats({ gads, n, provizoriski, vards: dati.profils.vards, izveidots: sodien(), ieraksti, darijumi, nesaistiti, rekini, ligumi,
+    g: { d1Apliekamie: sk(g.d1Apliekamie), d1Ieturetais: sk(g.d1Ieturetais), citiNodokli: sk(g.citiNodokli), dzivibasIemaksas: sk(g.dzivibasIemaksas), attaisnotie: sk(g.attaisnotie),
+      vsaoiDeklareta: g.vsaoiDeklareta === undefined || g.vsaoiDeklareta === '' ? '' : sk(g.vsaoiDeklareta) } });
+  lejupieladet(`gramatvediba-parskats-${gads}.xlsx`, fails, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  toast('Pārskats lejupielādēts');
 }
 
 // ---------- Pasūtītāja izvēlne ----------
@@ -321,6 +366,7 @@ let bankGads = null;
 function saitesIzvele(r, atslega) {
   const tagad = rekinsPecSaites(r.saite) || ligumsPecSaites(r.saite);
   const rek = dati.rekini.filter((x) => !rekinaStatuss(x).pilniba || x === tagad || (x.samaksatsCitur && !samaksatsRekinam(x))).sort((a, b) => b.nr - a.nr);
+  if (!rek.length && !dati.autorligumi.length) return '<span class="note" style="display:block;margin:6px 0">Nav rīkā izrakstītu rēķinu vai ievadītu līgumu, ko piesaistīt. Tas nav obligāti: nodokļiem pietiek ar kategoriju un darba veidu.</span>';
   const opc = (v, t, sel) => `<option value="${v}" ${sel ? 'selected' : ''}>${h(t)}</option>`;
   return `<select data-saite="${atslega}" title="Rēķins vai līgums">${opc('', '— bez rēķina vai līguma —', !tagad)}
     ${rek.map((x) => opc('r:' + x.id, `Rēķins ${rekinaNumursTeksts(x.nr, pasutitajs(x.pasutitajsId).veidne)} · ${pasutitajs(x.pasutitajsId).nosaukums} · ${naudaLv(rekinaKopsumma(x))}`, x === tagad)).join('')}
@@ -358,7 +404,7 @@ const rinduTabula = (rindas, sesija, atslega) => `<div class="tbl"><table><thead
     ${sesija ? '' : `<td><button class="link" data-dzd="${h(r.arhivaKods)}">Dzēst</button></td>`}</tr>`).join('')}</tbody></table></div>`;
 
 function skatsBanka(v) {
-  const s = bankasSesija; bankGads ??= gadsNo(sodien());
+  const s = bankasSesija; bankGads ??= gadsNo(sodien()); saglabatSesiju();
   let saturs = `<h2>Banka</h2><p class="lead">Ielādē Swedbank izrakstu CSV formātā. Rīks katru ienākošo maksājumu piesaista rēķinam, līgumam vai kategorijai. Ja nav pārliecināts, tas jautā tev.</p>
   <div class="panel row"><label style="flex:1">Izraksts (CSV)<input type="file" id="csv" accept=".csv,text/csv"></label></div>`;
   if (s) {
@@ -370,7 +416,7 @@ function skatsBanka(v) {
     saturs += `<h3>Izraksts ${datumsLv(s.izraksts.periods.no)} – ${datumsLv(s.izraksts.periods.lidz)} · konts ${h(s.izraksts.konts)}</h3>
     <p class="note">Jauni darījumi: ${s.rindas.length}${s.jau ? `, jau ielādēti iepriekš: ${s.jau}` : ''}.
     ${s.jau ? '' : (Math.abs(kopa - s.izraksts.apgrozijums.K) < 0.005 ? `Ienākošo maksājumu kopsumma ${naudaLv(kopa)} € sakrīt ar bankas kredīta apgrozījumu ✓` : `<span class="tag warn">uzmanību</span> Ienākošo maksājumu kopsumma ${naudaLv(kopa)} € nesakrīt ar bankas kredīta apgrozījumu ${naudaLv(s.izraksts.apgrozijums.K)} €.`)}
-    <b>Darījumi tiek saglabāti tikai pēc apstiprināšanas.</b></p>
+    <b>Darījumi tiek saglabāti grāmatvedībā tikai pēc apstiprināšanas.</b>${s.atjaunots ? ' Šis ir iepriekš ielādētais, vēl neapstiprinātais izraksts: tavas izvēles ir saglabātas.' : ''}</p>
     ${s.rindas.length ? poga + rinduTabula(s.rindas, true, (_, i) => String(i)) + (s.rindas.length > 8 ? poga : '') : '<p class="row"><button data-atmest>Aizvērt</button></p>'}`;
   }
   // Rēķini bez pilna maksājuma
@@ -431,7 +477,6 @@ function skatsBanka(v) {
   });
   $$('[data-necitur]').forEach((b) => b.onclick = () => { delete dati.rekini.find((r) => r.id === b.dataset.necitur).samaksatsCitur; saglabatUnRadit('Atzīme noņemta'); });
 }
-window.addEventListener('beforeunload', (e) => { if (bankasSesija?.rindas.length) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---------- Ceturkšņa ziņojums (EDS izskatā) ----------
 let izvGads = null, izvCet = null;
@@ -476,7 +521,8 @@ function skatsDeklaracija(v) {
   const ievade = (k, nos) => `<label>${nos}<input data-g="${k}" inputmode="decimal" value="${h(g[k] ?? '')}"></label>`;
   const rinda = (nr, nos, x, b) => `<tr><td>${h(nos)}</td><td class="n">${nr}</td><td class="n c" data-k="${eds(x)}">${b ? '<b>' : ''}${eds(x)}${b ? '</b>' : ''}</td></tr>`;
   v.innerHTML = `<h2>Gada ienākumu deklarācija</h2>
-  <div class="row" style="margin-bottom:14px">${gaduIzvele('g', deklGads)}</div>${provBaneris(deklGads)}
+  <div class="row" style="margin-bottom:14px;align-items:flex-end">${gaduIzvele('g', deklGads)}<button id="parskats">Pārskats grāmatvedim (Excel)</button></div>${provBaneris(deklGads)}
+  <p class="note">Pārskatā ir žurnāls, ceturkšņu VSAOI, D3 un D lapa, visi bankas darījumi ar kategorijām, rēķini un līgumi. Aprēķini ir Excel formulas, tāpēc grāmatvedis var pārbaudīt katru skaitli.</p>
   <h3>D3 · Ienākumi no saimnieciskās darbības</h3><p class="note">Šos skaitļus ievadi EDS. Uzklikšķini, lai nokopētu. Ja VID priekšaizpildījumā ir citi skaitļi, pareizie ir tie, kas balstīti uz tavu uzskaiti.</p>
   <div class="tbl eds"><table><thead><tr><th></th><th class="n">Rinda</th><th class="n">Nodokļa maksātāja deklarētie dati</th></tr></thead><tbody>
     ${rinda(R.ienemumi, 'Ieņēmumi no citiem saimnieciskās darbības veidiem', a.d3.ienemumi)}
@@ -497,6 +543,7 @@ function skatsDeklaracija(v) {
   </tbody></table></div>
   <p class="note">Deklarāciju iesniedz no ${datumsLv(`${deklGads + 1}-03-01`)} līdz ${datumsLv(`${deklGads + 1}-06-01`)} IIN samaksā līdz ${datumsLv(`${deklGads + 1}-06-23`)}${a.d.r24 > n.iinVienaMaksajumaRobeza ? ' Summu var maksāt trīs daļās.' : ''}</p>`;
   $('#g').onchange = (e) => { deklGads = Number(e.target.value); radit(); };
+  $('#parskats').onclick = () => lejupieladetParskatu(deklGads);
   $$('[data-g]').forEach((el) => el.onchange = () => { dati.gadi[deklGads] = { ...(dati.gadi[deklGads] || {}), [el.dataset.g]: el.value.trim() }; saglabatUnRadit(); });
   $$('[data-k]').forEach((td) => td.onclick = () => kopet(td.dataset.k));
 }
@@ -537,7 +584,7 @@ function skatsIestatijumi(v) {
   $$('[data-dz]').forEach((b) => b.onclick = () => { dati.pasutitaji = dati.pasutitaji.filter((x) => x.id !== b.dataset.dz); saglabatUnRadit('Pasūtītājs dzēsts'); });
   $('#eksp').onclick = () => lejupieladet(`gramatvediba-${sodien()}.json`, eksportet(dati), 'application/json');
   $('#imp').onchange = async (e) => { try { const d = importet(await e.target.files[0].text()); if (confirm('Aizstāt pašreizējos datus ar rezerves kopiju?')) { dati = d; saglabat(dati); dati = ieladet(); saglabatUnRadit('Dati atjaunoti'); } } catch (err) { toast(err.message); } };
-  $('#dzestVisu').onclick = () => { if (confirm('Dzēst visus datus šajā pārlūkā? Rezerves kopija netiks dzēsta.')) { dati = TUKSI_DATI(); saglabatUnRadit('Dati dzēsti'); } };
+  $('#dzestVisu').onclick = () => { if (confirm('Dzēst visus datus šajā pārlūkā? Rezerves kopija netiks dzēsta.')) { dati = TUKSI_DATI(); bankasSesija = null; saglabatSesiju(); saglabatUnRadit('Dati dzēsti'); } };
 }
 
 // ---------- Maršruti un sākums ----------

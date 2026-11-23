@@ -78,3 +78,19 @@ test('Daļēji apmaksāts rēķins paliek neapmaksāto sarakstā', () => {
 test('Izraksta periods tiek nolasīts', () => {
   assert.deepEqual(nol(csv).periods, { no: '2026-01-01', lidz: '2026-01-07' });
 });
+
+test('Otrs konts (nodokļu konts): pārskaitījums no sava konta un maksājumi VID', () => {
+  const nk = [
+    '"Klienta konts";"Ieraksta tips";"Datums";"Saņēmējs/Maksātājs";"Informācija saņēmējam";"Summa";"Valūta";"Debets/Kredīts";"Arhīva kods";"Maksājuma veids";"Refernces numurs";"Dokumenta numurs";',
+    '"LV00TEST0000000000001";"10";"01.04.2026";"";"Sākuma atlikums";"0,00";"EUR";"K";"";"AS";"";"";',
+    '"LV00TEST0000000000001";"20";"10.04.2026";"JĀNIS PARAUGS";"Maksājums starp saviem kontiem";"600,00";"EUR";"K";"N1";"PRV";"";"";',
+    '"LV00TEST0000000000001";"20";"22.04.2026";"VALSTS BUDZETS (VID)";"Vienotais nodokļu konts";"294,35";"EUR";"D";"N2";"INB";"";"";',
+    '"LV00TEST0000000000001";"20";"20.06.2026";"VALSTS BUDZETS (VID)";"Vienotais nodokļu konts";"212,19";"EUR";"D";"N3";"INB";"";"";',
+    '"LV00TEST0000000000001";"82";"30.06.2026";"";"Apgrozījums";"600,00";"EUR";"K";"";"K2";"";"";',
+    '"LV00TEST0000000000001";"82";"30.06.2026";"";"Apgrozījums";"506,54";"EUR";"D";"";"K2";"";"";'
+  ].join('\r\n');
+  const iz = nolasitSwedbankCsv(nk);
+  const k = klasificet(iz.darijumi, { savsVards: 'Jānis Paraugs', rekini: [], autorligumi: [] });
+  assert.deepEqual(k.map((d) => d.kategorija), ['savs-konts', 'vid-maksajums', 'vid-maksajums']);
+  assert.equal(kopsavilkums(k, iz).sakrit, true);
+});

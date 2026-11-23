@@ -16,6 +16,7 @@ Rīks nav nodokļu konsultants un neko neiesniedz EDS.
 - `src/rekviziti.js` — pasūtītāja rekvizītu sadalīšana pa laukiem no ielīmēta teksta.
 - `src/darbaVeidi.js` — darba veidi un nosacīto izdevumu normas.
 - `src/glabatuve.js` — datu glabāšana (pagaidām pārlūkā).
+- `src/parskats.js`, `src/xlsx.js` — gada pārskats grāmatvedim Excel formātā (ar formulām), bez ārējām bibliotēkām.
 - `tests/` — publiskie testi ar VID piemēriem un izdomātiem datiem.
 
 Testi ar īstiem personas datiem glabājas tikai lokāli mapē `private/` un netiek publicēti (sk. `.gitignore`).
