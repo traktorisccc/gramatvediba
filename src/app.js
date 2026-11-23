@@ -3,13 +3,14 @@ import { r2, menesuIenakumi, ceturksnaZinojums, d3, gadaDeklaracija } from './ca
 import { DARBA_VEIDI } from './darbaVeidi.js';
 import { nolasitSwedbankCsv, klasificet, normalizetNosaukumu } from './banka.js';
 import { eRekinsXml } from './eRekins.js';
-import { rekinsHtml, rekinaKopsumma, rekinaNumursTeksts, rekinaNumursId, naudaLv, datumsLv } from './rekinsHtml.js';
+import { rekinaKopsumma, rekinaNumursTeksts, rekinaNumursId, naudaLv, datumsLv } from './rekinsHtml.js';
 import { sadalitRekvizitus } from './rekviziti.js';
 import { gadaParskats, VID_MAKSAJUMS } from './parskats.js';
 import { ieladet, saglabat, eksportet, importet, TUKSI_DATI } from './glabatuve.js';
 import * as drive from './drive.js';
 import { izveidotSinhronizatoru } from './sinhronizacija.js';
-import { parbauditBlanku, aizpilditBlanku, blankasFailaVards } from './hanzas.js';
+import { parbauditBlanku, aizpilditBlanku, blankasFailaVards, bankasNosaukums } from './hanzas.js';
+import { rekinsPdf, pdfFailaVards } from './pdf.js';
 
 // ---------- Pamata palīgi ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -20,6 +21,25 @@ const eds = (x) => r2(x).toFixed(2).replace('.', ',');           // EDS formāts
 const isoLokali = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const sodien = () => isoLokali(new Date());                       // vietējais datums, nevis UTC
 const pieskaititDienas = (iso, n) => { const t = new Date(iso + 'T12:00:00'); t.setDate(t.getDate() + n); return isoLokali(t); };
+/** Datuma lauks dd.mm.gggg neatkarīgi no pārlūka valodas. Īstā vērtība (GGGG-MM-DD) ir slēptajā laukā ar doto name. */
+const TERMINA_DIENAS = 14;
+const datumsTeksts = (iso) => iso ? iso.split('-').reverse().join('.') : '';
+function nolasitDatumu(t) {
+  const m = /^\s*(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2}|\d{4})\.?\s*$/.exec(t || ''); if (!m) return '';
+  const g = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]), mm = Number(m[2]), d = Number(m[1]), x = new Date(Date.UTC(g, mm - 1, d));
+  return x.getUTCMonth() === mm - 1 && x.getUTCDate() === d ? `${g}-${String(mm).padStart(2, '0')}-${String(d).padStart(2, '0')}` : '';
+}
+const datumaLauks = (name, iso = '', { obligats = false, attr = '', stils = '' } = {}) => `<span class="datums" style="${stils}"><input class="dtxt" inputmode="numeric" placeholder="dd.mm.gggg" value="${datumsTeksts(iso)}" ${obligats ? 'required' : ''} autocomplete="off"><button type="button" class="dbtn" aria-label="Kalendārs" tabindex="-1">▦</button><input type="date" class="dpick" tabindex="-1" aria-hidden="true" ${name ? `name="${name}"` : ''} value="${iso}" ${attr}></span>`;
+function piesaistitDatumus(sakne = document) {
+  for (const el of $$('.datums', sakne)) {
+    const txt = $('.dtxt', el), pick = $('.dpick', el);
+    const uzPick = () => { const iso = nolasitDatumu(txt.value); txt.setCustomValidity(txt.value && !iso ? 'Datums formā dd.mm.gggg' : ''); if (pick.value !== iso) { pick.value = iso; pick.dispatchEvent(new Event('change', { bubbles: true })); } };
+    txt.oninput = uzPick;
+    txt.onblur = () => { uzPick(); if (pick.value) txt.value = datumsTeksts(pick.value); };
+    pick.addEventListener('change', () => { if (nolasitDatumu(txt.value) !== pick.value) txt.value = datumsTeksts(pick.value); });
+    $('.dbtn', el).onclick = () => { try { pick.showPicker(); } catch { txt.focus(); } };
+  }
+}
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const gadsNo = (iso) => Number(iso.slice(0, 4));
 const MENESI = ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris'];
@@ -88,25 +108,74 @@ async function saglabatDrive(cels, nosaukums, saturs, tips) {
   return drive.saglabatMape(driveMeta().mapesId, cels, nosaukums, saturs, tips, mapjuKesh);
 }
 /** Rēķina fails arhīvam: Hanzas Perons — aizpildīta Excel blanka; pārējiem — e-rēķins XML. */
-async function rekinaArhivaFails(r) {
+// Rēķina PDF: fonti no rīka mapes, logo pārvērsts pikseļos ar canvas (der jebkurš attēla formāts)
+let fontuKesh = null, logoKesh = { url: null, v: null };
+async function fonti() {
+  if (fontuKesh) return fontuKesh;
+  const lad = async (n) => { const r = await fetch(`fonts/GramatvedibaSans-${n}.ttf`); if (!r.ok) throw new Error('Neizdevās ielādēt fontu PDF failam.'); return new Uint8Array(await r.arrayBuffer()); };
+  return (fontuKesh = { regular: await lad('Regular'), bold: await lad('Bold') });
+}
+async function logoPikseli(url) {
+  if (!url) return null;
+  if (logoKesh.url === url) return logoKesh.v;
+  const img = new Image(); img.src = url; await img.decode();
+  const mer = Math.min(1, 300 / Math.max(img.naturalWidth, img.naturalHeight)), w = Math.max(1, Math.round(img.naturalWidth * mer)), hh = Math.max(1, Math.round(img.naturalHeight * mer));
+  const c = document.createElement('canvas'); c.width = w; c.height = hh; const x = c.getContext('2d'); x.drawImage(img, 0, 0, w, hh);
+  const d = x.getImageData(0, 0, w, hh).data, rgb = new Uint8Array(w * hh * 3), alfa = new Uint8Array(w * hh); let caursp = false;
+  for (let i = 0; i < w * hh; i++) { rgb[i * 3] = d[i * 4]; rgb[i * 3 + 1] = d[i * 4 + 1]; rgb[i * 3 + 2] = d[i * 4 + 2]; alfa[i] = d[i * 4 + 3]; if (d[i * 4 + 3] < 255) caursp = true; }
+  logoKesh = { url, v: { platums: w, augstums: hh, rgb, alfa: caursp ? alfa : null } };
+  return logoKesh.v;
+}
+async function rekinaPdfFails(r) {
   const p = pasutitajs(r.pasutitajsId);
-  if (p.veidne === 'hanzas') {
+  const saturs = await rekinsPdf(r, dati.profils, p, await fonti(), await logoPikseli(dati.profils.logo).catch(() => null));
+  return { nosaukums: pdfFailaVards(dati.profils.vards, r, p.nosaukums), saturs, tips: 'application/pdf' };
+}
+/** Kādi faili rēķinam glabājas Drive: Hanzas Perons — Excel; pārējiem PDF; budžeta iestādei arī e-rēķins XML. */
+function vajadzigieFaili(r) {
+  const p = pasutitajs(r.pasutitajsId);
+  if (p.veidne === 'hanzas') return ['xlsx'];
+  return p.budzetaIestade ? ['pdf', 'xml'] : ['pdf'];
+}
+async function rekinaArhivaFails(r, veids) {
+  const p = pasutitajs(r.pasutitajsId);
+  if (veids === 'xlsx') {
     if (!dati.hanzasBlanka?.fails) return null;
     return { nosaukums: blankasFailaVards(dati.profils.vards, r.datums, r.nr), saturs: await aizpilditBlanku(noBase64(dati.hanzasBlanka.fails), r, dati.profils), tips: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
   }
+  if (veids === 'pdf') return rekinaPdfFails(r);
   const { nr, xml } = rekinaXml(r);
   return { nosaukums: `Rekins_${nr}_${slugs(p.nosaukums)}.xml`, saturs: xml, tips: 'application/xml' };
 }
-/** Augšupielādē rēķinus, kuru fails Drive vēl nav vai ir novecojis. */
+const failaLauks = (veids) => veids === 'pdf' ? 'pdfDrive' : 'driveFails';
+/** Augšupielādē rēķinu failus, kuru Drive vēl nav vai kas ir novecojuši (rēķins labots). */
 async function arhivetRekinus() {
   let mainits = false;
-  for (const r of dati.rekini.filter((x) => x.driveGaida || !x.driveFails)) {
+  for (const r of dati.rekini) {
+    const trukst = vajadzigieFaili(r).filter((v) => r.driveGaida || !r[failaLauks(v)]);
+    if (!trukst.length) continue;
     if (!driveGatavs()) break;
-    const f = await rekinaArhivaFails(r); if (!f) continue;
-    const j = await saglabatDrive([r.datums.slice(0, 4), 'Rēķini'], f.nosaukums, f.saturs, f.tips); if (!j) break;
-    r.driveFails = { id: j.id, saite: j.webViewLink || '', nosaukums: f.nosaukums }; delete r.driveGaida; mainits = true;
+    let visi = true;
+    for (const v of trukst) {
+      const f = await rekinaArhivaFails(r, v); if (!f) { visi = false; continue; }
+      const j = await saglabatDrive([r.datums.slice(0, 4), 'Rēķini'], f.nosaukums, f.saturs, f.tips); if (!j) return;
+      r[failaLauks(v)] = { id: j.id, saite: j.webViewLink || '', nosaukums: f.nosaukums }; mainits = true;
+    }
+    if (visi) delete r.driveGaida;
   }
   if (mainits) { saglabatDati(); if (location.hash === '#rekini' && !rekinaForma) radit(); }   // neskar formu, kurā raksta
+}
+/** Poga „PDF”: izveido PDF, lejupielādē un saglabā Drive. */
+async function lejupieladetPdf(r) {
+  try {
+    const f = await rekinaPdfFails(r);
+    lejupieladet(f.nosaukums, f.saturs, 'application/pdf');
+    if (driveGatavs()) {
+      const j = await saglabatDrive([r.datums.slice(0, 4), 'Rēķini'], f.nosaukums, f.saturs, f.tips);
+      if (j) { r.pdfDrive = { id: j.id, saite: j.webViewLink || '', nosaukums: f.nosaukums }; saglabatUnRadit('PDF lejupielādēts un saglabāts Google Drive'); return; }
+    }
+    toast(driveMeta().konts ? 'PDF lejupielādēts. Google Drive tas tiks saglabāts pēc pieslēgšanās.' : 'PDF lejupielādēts');
+  } catch (e) { toast(e.message || 'Neizdevās izveidot PDF'); }
 }
 /** Lietotāja izvēlēts PDF (rēķins vai līgums) uz Drive. */
 async function augsupieladetPdf(fl, cels, nosaukums) {
@@ -259,6 +328,13 @@ function lejupieladetParskatu(gads) {
 }
 
 // ---------- Pasūtītāja izvēlne ----------
+/** Kas pasūtītājam trūkst rēķinam. Hanzas Perons blankā viņu rekvizīti jau ir, tāpēc tur vajag tikai nosaukumu un reģ. nr. */
+function trukstRekviziti(p) {
+  const t = [];
+  if (!p.nosaukums) t.push('nosaukums'); if (!p.regNr) t.push('reģistrācijas nr.');
+  if (p.veidne !== 'hanzas') { if (!p.adrese?.iela && !p.adrese?.pilseta) t.push('adrese'); if (!p.konts) t.push('konta numurs'); }
+  return t;
+}
 function pasutitajaIzvele(name, izveleta) {
   const lietojums = (x) => (x.biezums || 0) + dati.rekini.filter((r) => r.pasutitajsId === x.id).length + dati.autorligumi.filter((l) => l.pasutitajsId === x.id).length;
   const opcijas = [...dati.pasutitaji].sort((a, b) => lietojums(b) - lietojums(a) || a.nosaukums.localeCompare(b.nosaukums, 'lv'));
@@ -272,7 +348,7 @@ function pasutitajaIzvele(name, izveleta) {
     <div class="grid">
       <label>Nosaukums<input data-p="nosaukums"></label><label>Reģ. nr.<input data-p="regNr"></label>
       <label>Iela, māja<input data-p="iela"></label><label>Pilsēta<input data-p="pilseta"></label><label>Pasta indekss<input data-p="indekss" placeholder="LV-1001"></label>
-      <label>Valsts<input data-p="valsts" value="LV"></label><label>E-pasts<input data-p="epasts"></label>
+      <label>Valsts<input data-p="valsts" value="LV"></label><label>Konta numurs<input data-p="konts"></label><label>Banka (ja ir)<input data-p="banka"></label><label>Bankas kods (ja ir)<input data-p="bic"></label><label>E-pasts<input data-p="epasts"></label>
       <label>Rēķina veidne<select data-p="veidne"><option value="standarta">Mana veidne</option><option value="hanzas">Hanzas Perons blanka</option></select></label>
       <label class="check"><input type="checkbox" data-p="budzetaIestade"> Budžeta iestāde (obligāts e-rēķins)</label>
     </div>
@@ -284,18 +360,21 @@ function piesaistitPasutitajaIzveli(el) {
   sel.onchange = () => { panel.hidden = sel.value !== '__jauns'; };
   $('[data-sadalit]', el).onclick = () => {
     const r = sadalitRekvizitus($('[data-ielime]', el).value);
-    for (const k of ['nosaukums', 'regNr', 'iela', 'pilseta', 'indekss', 'valsts', 'epasts']) $(`[data-p="${k}"]`, el).value = r[k];
+    if (!r.banka && r.bic) r.banka = bankasNosaukums(r.bic);
+    for (const k of ['nosaukums', 'regNr', 'iela', 'pilseta', 'indekss', 'valsts', 'epasts', 'konts', 'banka', 'bic']) $(`[data-p="${k}"]`, el).value = r[k];
     toast(r.regNr ? 'Sadalīts. Pārbaudi laukus.' : 'Reģistrācijas numurs netika atrasts. Ievadi to ar roku.');
   };
 }
-function nolasitPasutitaju(el) {
+/** pilni: rēķinam vajag visus rekvizītus; līgumam pietiek ar nosaukumu un reģ. nr. */
+function nolasitPasutitaju(el, { pilni = true } = {}) {
   const sel = $('[data-pasutitajs]', el);
   if (sel.value !== '__jauns') return sel.value;
   const v = (k) => $(`[data-p="${k}"]`, el);
   const p = { id: uid(), nosaukums: v('nosaukums').value.trim(), regNr: v('regNr').value.trim(),
     adrese: { iela: v('iela').value.trim(), pilseta: v('pilseta').value.trim(), indekss: v('indekss').value.trim(), valsts: v('valsts').value.trim() || 'LV' },
-    epasts: v('epasts').value.trim(), veidne: v('veidne').value, budzetaIestade: v('budzetaIestade').checked };
-  if (!p.nosaukums || !p.regNr) { toast('Ievadi pasūtītāja nosaukumu un reģistrācijas numuru'); return null; }
+    epasts: v('epasts').value.trim(), konts: v('konts').value.replace(/\s/g, ''), banka: v('banka').value.trim(), bic: v('bic').value.trim().toUpperCase(), veidne: v('veidne').value, budzetaIestade: v('budzetaIestade').checked };
+  const t = pilni ? trukstRekviziti(p) : [!p.nosaukums && 'nosaukums', !p.regNr && 'reģistrācijas nr.'].filter(Boolean);
+  if (t.length) { toast(`Pasūtītājam jānorāda: ${t.join(', ')}.`); return null; }
   dati.pasutitaji.push(p); return p.id;
 }
 const veidaOpcijas = (izv) => Object.entries(DARBA_VEIDI).map(([k, v]) => `<option value="${k}" ${k === izv ? 'selected' : ''}>${h(v.nosaukums)} (${v.norma} %)</option>`).join('');
@@ -339,7 +418,7 @@ function skatsParskats(v) {
     <div class="panel"><h3 style="margin-top:0">Tuvākie termiņi</h3>${nakamie.map((t) => `<p style="margin:6px 0"><b>${datumsLv(t.d)}</b> ${h(t.t)}${t.s ? ` · ${naudaLv(t.s)} €` : ''}</p>`).join('') || '<p class="note">Šim gadam termiņu vairs nav.</p>'}</div>
   </div>
   <h3>Maksājumi VID par ${gads}. gadu</h3>
-  <form class="panel grid" id="vf"><label>Datums<input type="date" name="datums" value="${sod}" required></label><label>Summa, €<input name="summa" inputmode="decimal" required></label>
+  <form class="panel grid" id="vf"><label>Datums${datumaLauks('datums', sod, { obligats: true })}</label><label>Summa, €<input name="summa" inputmode="decimal" required></label>
     <label>Par kuru gadu<select name="gads">${[gads - 1, gads].map((y) => `<option ${y === gads ? 'selected' : ''}>${y}</option>`).join('')}</select></label><button type="submit">Pievienot maksājumu</button></form>
   <p class="note">Maksājumus VID rīks atpazīst bankas izrakstā. Ja nodokļus maksā no konta, kura izrakstu rīkā neielādē, ievadi tos šeit.</p>
   ${vidMaks.length ? `<div class="tbl"><table><thead><tr><th>Datums</th><th class="n">Summa</th><th>Avots</th><th></th></tr></thead><tbody>
@@ -370,18 +449,13 @@ function skatsRekini(v) {
     const tags = st.pilniba ? `<span class="tag ok">${r.samaksatsCitur && !st.samaksats ? 'apmaksāts citā kontā' : 'apmaksāts'}</span>` : st.daleji ? `<span class="tag warn">daļēji, atlikums ${naudaLv(st.atlikums)}</span>` : r.termins < sodien() ? '<span class="tag warn">kavēts</span>' : '<span class="tag">gaida</span>';
     return `<tr><td>${h(rekinaNumursTeksts(r.nr, p.veidne))}</td><td>${datumsLv(r.datums)}</td><td class="wrap">${h(p.nosaukums)}${p.budzetaIestade ? ' <span class="tag">budžeta iestāde</span>' : ''}</td>
     <td class="n">${naudaLv(st.kopa)}</td><td>${tags}</td>
-    <td><div class="row">${p.veidne === 'hanzas' ? `<button class="link" data-hanzas="${r.id}">Excel</button>` : `<button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button>`}${driveSaite(r.driveFails, p.veidne === 'hanzas' ? 'Excel Drive' : 'XML Drive')}${p.veidne === 'hanzas' ? '' : (r.pdfDrive ? driveSaite(r.pdfDrive, 'PDF Drive') : `<label class="link" style="cursor:pointer;font-size:.9rem;color:var(--muted)" title="Saglabā PDF Google Drive mapē Rēķini">+ PDF Drive<input type="file" accept="application/pdf,.pdf" data-pdfdr="${r.id}" hidden></label>`)}<button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
+    <td><div class="row">${p.veidne === 'hanzas' ? `<button class="link" data-hanzas="${r.id}">Excel</button>` : `<button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button>`}${driveSaite(r.pdfDrive, 'PDF Drive')}${driveSaite(r.driveFails, p.veidne === 'hanzas' ? 'Excel Drive' : 'XML Drive')}<button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
   </tbody></table></div>`;
   const atrast = (id) => dati.rekini.find((r) => r.id === id);
   if ($('#jauns')) $('#jauns').onclick = () => { rekinaForma = { pozicijas: [{ nosaukums: '', daudzums: 1, cena: '' }] }; radit(); };
-  $$('[data-pdf]').forEach((b) => b.onclick = () => atvertPdf(atrast(b.dataset.pdf)));
+  $$('[data-pdf]').forEach((b) => b.onclick = () => lejupieladetPdf(atrast(b.dataset.pdf)));
   $$('[data-xml]').forEach((b) => b.onclick = () => lejupieladetXml(atrast(b.dataset.xml)));
   $$('[data-hanzas]').forEach((b) => b.onclick = () => lejupieladetHanzas(atrast(b.dataset.hanzas)));
-  $$('[data-pdfdr]').forEach((el) => el.onchange = async () => {
-    const r = atrast(el.dataset.pdfdr), fl = el.files[0]; if (!fl) return;
-    try { const f = await augsupieladetPdf(fl, [r.datums.slice(0, 4), 'Rēķini'], `Rekins_${rekinaNumursId(r.nr, pasutitajs(r.pasutitajsId).veidne)}_${slugs(pasutitajs(r.pasutitajsId).nosaukums)}.pdf`);
-      if (f) { r.pdfDrive = f; saglabatUnRadit('PDF saglabāts Google Drive'); } } catch (e) { toast(e.message); }
-  });
   $$('[data-labot]').forEach((b) => b.onclick = () => { const r = atrast(b.dataset.labot); rekinaForma = { ...r, labo: r.id, pozicijas: r.pozicijas.map((p) => ({ ...p })) }; radit(); window.scrollTo({ top: 0 }); });
   $$('[data-dzest]').forEach((b) => b.onclick = () => {
     const r = atrast(b.dataset.dzest), pedejais = r.nr === dati.profils.nakamaisNr - 1;
@@ -396,11 +470,11 @@ function rekinaRedaktors() {
   return `<form class="panel" id="rf"><h3 style="margin-top:0">${labo ? `Labot rēķinu ${h(rekinaNumursTeksts(f.nr, pasutitajs(f.pasutitajsId).veidne))}` : `Jauns rēķins ${h('#' + dati.profils.nakamaisNr)}`}</h3>
   ${labo ? '<p class="note">Ja rēķins jau ir nosūtīts pasūtītājam, pēc labošanas nosūti viņam arī jauno versiju.</p>' : ''}
   <div class="grid">${pasutitajaIzvele('pas', f.pasutitajsId)}
-    <label>Datums<input type="date" name="datums" value="${d}" required></label>
-    <label>Apmaksas termiņš<input type="date" name="termins" value="${f.termins || pieskaititDienas(d, 14)}" required></label>
+    <label>Datums${datumaLauks('datums', d, { obligats: true })}</label>
+    <label>Apmaksas termiņš<span class="note" id="terminsTeksts" style="padding:9px 0">${datumsTeksts(pieskaititDienas(d, TERMINA_DIENAS))} (${TERMINA_DIENAS} dienas)</span></label>
     <label>Valoda<select name="valoda"><option value="lv">Latviešu</option><option value="en" ${f.valoda === 'en' ? 'selected' : ''}>Angļu</option></select></label>
     <label>Līguma nr. (ja ir)<input name="ligumaNr" value="${h(f.ligumaNr || '')}"></label>
-    <label>Periods no (Hanzas Perons: obligāti)<input type="date" name="no" value="${f.periods?.no || ''}"></label><label>Periods līdz<input type="date" name="lidz" value="${f.periods?.lidz || ''}"></label>
+    <label>Periods no (Hanzas Perons: obligāti)${datumaLauks('no', f.periods?.no || '')}</label><label>Periods līdz${datumaLauks('lidz', f.periods?.lidz || '')}</label>
     ${veidaIzvele('veids', f.veids)}
   </div>
   <h3>Pozīcijas</h3><div id="poz">${f.pozicijas.map((p, i) => `<div class="poz">
@@ -414,7 +488,8 @@ function piesaistitRedaktoru() {
   const form = $('#rf'); piesaistitPasutitajaIzveli(form);
   const pozicijas = () => rekinaForma.pozicijas.map((_, i) => ({ nosaukums: form[`pn${i}`].value.trim(), daudzums: sk(form[`pd${i}`].value) || 1, cena: sk(form[`pc${i}`].value) }));
   // Saglabā formā jau ievadīto, lai pārzīmēšana neko neizdzēš
-  const paturet = () => Object.assign(rekinaForma, { pasutitajsId: form.pas.value, datums: form.datums.value, termins: form.termins.value, valoda: form.valoda.value, ligumaNr: form.ligumaNr.value,
+  form.datums.addEventListener('change', () => { if (form.datums.value) $('#terminsTeksts').textContent = `${datumsTeksts(pieskaititDienas(form.datums.value, TERMINA_DIENAS))} (${TERMINA_DIENAS} dienas)`; });
+  const paturet = () => Object.assign(rekinaForma, { pasutitajsId: form.pas.value, datums: form.datums.value, valoda: form.valoda.value, ligumaNr: form.ligumaNr.value,
     periods: { no: form.no.value, lidz: form.lidz.value }, veids: form.veids.value, pozicijas: pozicijas(),
     jaunsPas: Object.fromEntries($$('[data-p]', form).map((el) => [el.dataset.p, el.type === 'checkbox' ? el.checked : el.value])) });
   if (rekinaForma.jaunsPas) for (const el of $$('[data-p]', form)) { const x = rekinaForma.jaunsPas[el.dataset.p]; if (x !== undefined) el.type === 'checkbox' ? (el.checked = x) : (el.value = x); }
@@ -428,11 +503,12 @@ function piesaistitRedaktoru() {
     const poz = pozicijas();
     if (poz.some((p) => !p.nosaukums || p.cena <= 0)) { toast('Katrai pozīcijai vajag nosaukumu un cenu'); return; }
     const pasId = nolasitPasutitaju(form); if (!pasId) return;
-    if (!pasutitajs(pasId).regNr) { toast('Pasūtītājam trūkst reģistrācijas numura. Papildini to sadaļā „Iestatījumi” → Pasūtītāji.'); return; }
+    { const t = trukstRekviziti(pasutitajs(pasId)); if (t.length) { toast(`Pasūtītājam trūkst: ${t.join(', ')}. Papildini sadaļā „Iestatījumi” → Pasūtītāji → Labot.`); return; } }
     if (pasutitajs(pasId).veidne === 'hanzas' && (!form.no.value || !form.lidz.value)) { toast('Hanzas Perons rēķinam norādi pakalpojuma periodu (no un līdz), kā pieņemšanas-nodošanas aktā.'); return; }
     if (pasutitajs(pasId).veidne === 'hanzas' && dati.hanzasBlanka?.pozicijuRindas && poz.length > dati.hanzasBlanka.pozicijuRindas) {
       toast(`Hanzas Perons blankā ir vieta ${dati.hanzasBlanka.pozicijuRindas} pozīcijai. Apvieno pozīcijas vienā.`); return; }
-    const lauki = { datums: form.datums.value, termins: form.termins.value, pasutitajsId: pasId, valoda: form.valoda.value, ligumaNr: form.ligumaNr.value.trim(),
+    if (!form.datums.value) { toast('Ievadi rēķina datumu formā dd.mm.gggg'); return; }
+    const lauki = { datums: form.datums.value, termins: pieskaititDienas(form.datums.value, TERMINA_DIENAS), pasutitajsId: pasId, valoda: form.valoda.value, ligumaNr: form.ligumaNr.value.trim(),
       periods: form.no.value && form.lidz.value ? { no: form.no.value, lidz: form.lidz.value } : null, veids: form.veids.value, pozicijas: poz };
     const p = pasutitajs(pasId);
     if (rekinaForma.labo) { Object.assign(dati.rekini.find((r) => r.id === rekinaForma.labo), lauki, { driveGaida: true }); rekinaForma = null; saglabatUnRadit('Izmaiņas saglabātas'); return; }
@@ -440,12 +516,6 @@ function piesaistitRedaktoru() {
     saglabatUnRadit(p.veidne === 'hanzas' ? 'Rēķins saglabāts. Lejupielādē to ar pogu „Excel”.'
       : p.budzetaIestade ? 'Rēķins saglabāts. Budžeta iestādei sūti e-rēķinu (XML) caur e-adresi.' : 'Rēķins saglabāts');
   };
-}
-function atvertPdf(r) {
-  const w = window.open('', '_blank');
-  if (!w) { toast('Pārlūks bloķēja jaunu logu. Atļauj uznirstošos logus šai vietnei.'); return; }
-  w.document.write(rekinsHtml(r, dati.profils, pasutitajs(r.pasutitajsId))); w.document.close();
-  setTimeout(() => w.print(), 400);
 }
 function rekinaXml(r) {
   const p = pasutitajs(r.pasutitajsId), pr = dati.profils, nr = rekinaNumursId(r.nr, p.veidne);
@@ -474,7 +544,7 @@ async function lejupieladetHanzas(r) {
 function skatsLigumi(v) {
   v.innerHTML = `<h2>Autorlīgumi</h2><p class="lead">Ieraksti autorlīgumu, kad to paraksti. Kad maksājums ienāks bankā, rīks to atpazīs pēc līguma numura (vismaz 4 zīmes) vai pēc pasūtītāja un summas.</p>
   <form class="panel" id="lf"><div class="grid">${pasutitajaIzvele('pas')}
-    <label>Līguma nr.<input name="nr" required></label><label>Datums<input type="date" name="datums" value="${sodien()}"></label>
+    <label>Līguma nr.<input name="nr" required></label><label>Datums${datumaLauks('datums', sodien())}</label>
     <label>Līguma summa, €<input name="summa" inputmode="decimal" required></label>${veidaIzvele('veids')}
     <label class="check"><input type="checkbox" name="ietur"> Izmaksātājs ietur visus nodokļus</label></div>
     <p class="row"><button class="primary" type="submit">Saglabāt līgumu</button></p></form>
@@ -486,7 +556,7 @@ function skatsLigumi(v) {
   f.onsubmit = (e) => {
     e.preventDefault(); const summa = sk(f.summa.value);
     if (summa <= 0) { toast('Ievadi līguma summu'); return; }
-    const pasId = nolasitPasutitaju(f); if (!pasId) return;
+    const pasId = nolasitPasutitaju(f, { pilni: false }); if (!pasId) return;
     dati.autorligumi.push({ id: uid(), nr: f.nr.value.trim(), pasutitajsId: pasId, datums: f.datums.value, summa, veids: f.veids.value, izmaksatajsIetur: f.ietur.checked });
     saglabatUnRadit('Līgums saglabāts');
   };
@@ -561,7 +631,7 @@ function skatsBanka(v) {
   const neapm = dati.rekini.filter((r) => !rekinaStatuss(r).pilniba), citur = dati.rekini.filter((r) => r.samaksatsCitur && !samaksatsRekinam(r));
   saturs += `<h3>Rēķini bez atrasta maksājuma</h3>${neapm.length ? `<div class="tbl"><table><thead><tr><th>Nr.</th><th>Pasūtītājs</th><th class="n">Summa</th><th class="n">Saņemts</th><th>Samaksāts citā kontā</th></tr></thead><tbody>
     ${neapm.map((r) => { const st = rekinaStatuss(r); return `<tr><td>${h(rekinaNumursTeksts(r.nr, pasutitajs(r.pasutitajsId).veidne))}</td><td class="wrap">${h(pasutitajs(r.pasutitajsId).nosaukums)}</td><td class="n">${naudaLv(st.kopa)}</td><td class="n">${naudaLv(st.samaksats)}</td>
-    <td>${st.samaksats === 0 ? `<div class="row"><input type="date" data-citur-d="${r.id}" style="width:auto"><button class="link" data-citur="${r.id}">Atzīmēt</button></div>` : '<span class="note">daļēji apmaksāts bankā</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+    <td>${st.samaksats === 0 ? `<div class="row">${datumaLauks('', '', { attr: `data-citur-d="${r.id}"`, stils: 'width:150px' })}<button class="link" data-citur="${r.id}">Atzīmēt</button></div>` : '<span class="note">daļēji apmaksāts bankā</span>'}</td></tr>`; }).join('')}</tbody></table></div>
     <p class="note">Atzīmē tikai tad, ja šī konta izrakstu rīkā neielādēsi. Ja vēlāk ielādēsi arī to, rīks izmantos bankas maksājumu un ienākumu neieskaitīs divreiz.</p>` : '<p class="note">Visiem rēķiniem maksājums ir atrasts.</p>'}
     ${citur.length ? `<p class="note">Atzīmēti kā samaksāti citā kontā: ${citur.map((r) => `${h(rekinaNumursTeksts(r.nr, pasutitajs(r.pasutitajsId).veidne))} (${datumsLv(r.samaksatsCitur.datums)}) <button class="link" data-necitur="${r.id}">atcelt</button>`).join(', ')}</p>` : ''}`;
   // Apstiprinātie darījumi: labojami
@@ -695,7 +765,7 @@ function pasutitajaLabosana(x) {
   const a = x.adrese || {}, l = (k, n, v) => `<label>${n}<input data-lp="${k}" value="${h(v ?? '')}"></label>`;
   return `<tr><td colspan="5"><div class="panel" style="margin:4px 0">
     <label>Ielīmē rekvizītus (nav obligāti)<textarea data-lp-ielime rows="3"></textarea></label><p class="row" style="margin:8px 0"><button type="button" data-lp-sadalit>Sadalīt pa laukiem</button></p>
-    <div class="grid">${l('nosaukums', 'Nosaukums', x.nosaukums)}${l('regNr', 'Reģ. nr.', x.regNr)}${l('iela', 'Iela, māja', a.iela)}${l('pilseta', 'Pilsēta', a.pilseta)}${l('indekss', 'Pasta indekss', a.indekss)}${l('valsts', 'Valsts', a.valsts || 'LV')}${l('epasts', 'E-pasts', x.epasts)}</div>
+    <div class="grid">${l('nosaukums', 'Nosaukums', x.nosaukums)}${l('regNr', 'Reģ. nr.', x.regNr)}${l('iela', 'Iela, māja', a.iela)}${l('pilseta', 'Pilsēta', a.pilseta)}${l('indekss', 'Pasta indekss', a.indekss)}${l('valsts', 'Valsts', a.valsts || 'LV')}${l('konts', 'Konta numurs', x.konts)}${l('banka', 'Banka (ja ir)', x.banka)}${l('bic', 'Bankas kods (ja ir)', x.bic)}${l('epasts', 'E-pasts', x.epasts)}</div>
     <p class="row" style="margin-bottom:0"><button class="primary" type="button" data-lp-saglabat="${x.id}">Saglabāt</button><button type="button" data-lp-atcelt>Atcelt</button></p></div></td></tr>`;
 }
 /** Pasūtītāju imports: pievieno tikai tos, kuru vēl nav (pēc reģ. nr. vai nosaukuma). */
@@ -708,7 +778,7 @@ function importetPasutitajus(saraksts) {
     const jau = dati.pasutitaji.find((p) => (x.regNr && p.regNr === x.regNr) || nos(p.nosaukums) === nos(x.nosaukums));
     if (jau) { if (!jau.biezums && x.biezums) jau.biezums = x.biezums; izlaisti++; continue; }
     dati.pasutitaji.push({ id: uid(), nosaukums: String(x.nosaukums), regNr: String(x.regNr || ''), adrese: { iela: '', pilseta: '', indekss: '', valsts: 'LV', ...(x.adrese || {}) },
-      epasts: String(x.epasts || ''), veidne: x.veidne === 'hanzas' ? 'hanzas' : 'standarta', budzetaIestade: !!x.budzetaIestade, biezums: Number(x.biezums) || 0 });
+      epasts: String(x.epasts || ''), konts: String(x.konts || ''), banka: String(x.banka || ''), bic: String(x.bic || ''), veidne: x.veidne === 'hanzas' ? 'hanzas' : 'standarta', budzetaIestade: !!x.budzetaIestade, biezums: Number(x.biezums) || 0 });
     pievienoti++;
   }
   return { pievienoti, izlaisti };
@@ -724,7 +794,7 @@ function skatsIestatijumi(v) {
     <label>Logo (100×100 px)<input type="file" id="logo" accept="image/*"></label><img id="logoPrieksskats" src="${p.logo || ''}" alt="Logo" width="64" height="64" style="object-fit:contain" ${p.logo ? '' : 'hidden'}>
   </div><p class="row"><button class="primary" type="submit">Saglabāt</button><span class="note" id="logoZina"></span></p></form>
   <h3>Pasūtītāji</h3><div class="tbl"><table><thead><tr><th>Nosaukums</th><th>Reģ. nr.</th><th>Veidne</th><th>Budžeta iestāde</th><th></th></tr></thead><tbody>
-  ${dati.pasutitaji.map((x) => x.id === laboPas ? pasutitajaLabosana(x) : `<tr><td class="wrap">${h(x.nosaukums)}${x.regNr ? '' : ' <span class="tag warn">trūkst rekvizītu</span>'}<br><span class="note">${h([x.adrese?.iela, x.adrese?.pilseta, x.adrese?.indekss].filter(Boolean).join(', '))}</span></td><td>${h(x.regNr)}</td>
+  ${dati.pasutitaji.map((x) => x.id === laboPas ? pasutitajaLabosana(x) : `<tr><td class="wrap">${h(x.nosaukums)}${trukstRekviziti(x).length ? ` <span class="tag warn" title="${h(trukstRekviziti(x).join(', '))}">trūkst rekvizītu</span>` : ''}<br><span class="note">${h([x.adrese?.iela, x.adrese?.pilseta, x.adrese?.indekss].filter(Boolean).join(', '))}</span></td><td>${h(x.regNr)}</td>
     <td><select data-veidne="${x.id}"><option value="standarta">Mana veidne</option><option value="hanzas" ${x.veidne === 'hanzas' ? 'selected' : ''}>Hanzas Perons</option></select></td>
     <td><input type="checkbox" data-budz="${x.id}" ${x.budzetaIestade ? 'checked' : ''} style="width:auto;min-height:0"></td>
     <td><div class="row"><button class="link" data-labopas="${x.id}">Labot</button>${dati.rekini.some((r) => r.pasutitajsId === x.id) || dati.autorligumi.some((l) => l.pasutitajsId === x.id) ? '' : `<button class="link" data-dz="${x.id}">Dzēst</button>`}</div></td></tr>`).join('') || '<tr><td colspan="5" class="note">Pasūtītājus pievieno, izrakstot rēķinu.</td></tr>'}
@@ -760,12 +830,13 @@ function skatsIestatijumi(v) {
   if ($('[data-lp-atcelt]')) $('[data-lp-atcelt]').onclick = () => { laboPas = null; radit(); };
   if ($('[data-lp-sadalit]')) $('[data-lp-sadalit]').onclick = () => {
     const r = sadalitRekvizitus($('[data-lp-ielime]').value);
+    if (!r.banka && r.bic) r.banka = bankasNosaukums(r.bic);
     for (const [k, v] of Object.entries(r)) { const el = $(`[data-lp="${k}"]`); if (el && v) el.value = v; }
   };
   if ($('[data-lp-saglabat]')) $('[data-lp-saglabat]').onclick = (e) => {
     const x = dati.pasutitaji.find((p) => p.id === e.target.dataset.lpSaglabat), v = (k) => $(`[data-lp="${k}"]`).value.trim();
     if (!v('nosaukums')) { toast('Ievadi nosaukumu'); return; }
-    Object.assign(x, { nosaukums: v('nosaukums'), regNr: v('regNr'), epasts: v('epasts'), adrese: { ...(x.adrese || {}), iela: v('iela'), pilseta: v('pilseta'), indekss: v('indekss'), valsts: v('valsts') || 'LV' } });
+    Object.assign(x, { nosaukums: v('nosaukums'), regNr: v('regNr'), epasts: v('epasts'), konts: v('konts').replace(/\s/g, ''), banka: v('banka'), bic: v('bic').toUpperCase(), adrese: { ...(x.adrese || {}), iela: v('iela'), pilseta: v('pilseta'), indekss: v('indekss'), valsts: v('valsts') || 'LV' } });
     for (const r of dati.rekini) if (r.pasutitajsId === x.id) r.driveGaida = true;          // e-rēķina XML Drive jāatjauno
     laboPas = null; saglabatUnRadit('Pasūtītājs saglabāts');
   };
@@ -802,6 +873,7 @@ function radit() {
   const r = SKATI[location.hash.slice(1)] ? location.hash.slice(1) : 'parskats';
   $$('#nav a').forEach((a) => a.getAttribute('href') === '#' + r ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   SKATI[r]($('#view'));
+  piesaistitDatumus($('#view'));
 }
 window.addEventListener('hashchange', radit);
 (async function sakt() {

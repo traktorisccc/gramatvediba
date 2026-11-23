@@ -17,10 +17,11 @@ Rīks nav nodokļu konsultants un neko neiesniedz EDS.
 - `src/darbaVeidi.js` — darba veidi un nosacīto izdevumu normas.
 - `src/glabatuve.js` — datu kopija pārlūkā (localStorage).
 - `src/drive.js` — Google Drive savienojums: pieslēgšanās (Google Identity Services), mapes un faili. Piekļuve tikai `drive.file`, piekļuves atslēga tikai atmiņā.
-- Drive mapes: `Grāmatvedība/<gads>/Rēķini` (e-rēķinu XML, Hanzas Perons Excel, pievienotie PDF), `Līgumi` (pievienotie PDF), `Bankas izraksti` (CSV pēc apstiprināšanas), `Atskaites` (pārskats grāmatvedim).
+- Drive mapes: `Grāmatvedība/<gads>/Rēķini` (rēķinu PDF; budžeta iestādēm arī e-rēķina XML; Hanzas Perons Excel), `Līgumi` (pievienotie PDF), `Bankas izraksti` (CSV pēc apstiprināšanas), `Atskaites` (pārskats grāmatvedim).
 - `src/sinhronizacija.js` — sinhronizācija starp pārlūku un Drive: konfliktu atpazīšana pēc faila versijas, ikdienas rezerves kopija Drive, viena konta slēdzene.
 - `privatums.html` — privātuma politika (Google prasa publicētai lietotnei).
 - `src/hanzas.js` — Hanzas Perons Excel blankas aizpildīšana (.xlsx lasīšana un rakstīšana pārlūkā, lauki tiek atrasti pēc uzrakstiem).
+- `src/pdf.js` — rēķina PDF bez ārējām bibliotēkām (iegults fonts, kopējams teksts, logo). Fonts `fonts/GramatvedibaSans-*.ttf` ir Liberation Sans 2.1.5 apakškopa (SIL OFL 1.1, sk. `fonts/LICENSE-OFL.txt`).
 - `src/parskats.js`, `src/xlsx.js` — gada pārskats grāmatvedim Excel formātā (ar formulām), bez ārējām bibliotēkām.
 - `tests/` — publiskie testi ar VID piemēriem un izdomātiem datiem.
 

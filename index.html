@@ -48,6 +48,7 @@ tr:last-child td{border-bottom:0}td.wrap{min-width:180px}
 .banner{border-left:6px solid var(--mark);background:var(--surface);padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:.92rem}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+.datums{display:flex;position:relative;align-items:stretch}.datums .dtxt{flex:1;border-top-right-radius:0;border-bottom-right-radius:0}.datums .dbtn{border-top-left-radius:0;border-bottom-left-radius:0;border-left:0;padding:0 10px;background:var(--field);color:var(--muted)}.datums .dpick{position:absolute;left:0;bottom:0;width:1px;height:1px;min-height:0;opacity:0;pointer-events:none;padding:0;border:0}
 .dlg{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:22px;max-width:min(520px,calc(100vw - 32px))}.dlg::backdrop{background:rgba(0,0,0,.45)}
 .poz{display:grid;grid-template-columns:1fr 90px 120px auto;gap:8px;align-items:end;margin-bottom:8px}
 @media (max-width:600px){h1{font-size:1.8rem}.poz{grid-template-columns:1fr 1fr}.poz label:first-child{grid-column:1/-1}}
