@@ -26,3 +26,10 @@ test('1600 € ar 50 % normu vienā mēnesī → VSAOI 244,35 €', () => {
 test('Ienākums zem minimālās algas → tikai 10 %', () => {
   assert.deepEqual(vsaoiMenesim(457.5, n2026), { objekts: 0, vsaoi: 0, pensObjekts: 457.5, pens: 45.75 });
 });
+
+import { gadaDeklaracija } from '../src/calc.js';
+test('Dzīvības apdrošināšanas atskaitījums: ne vairāk kā 10 % no ienākuma un ne vairāk kā 4 000 € gadā', () => {
+  assert.equal(gadaDeklaracija({ d3Apliekamie: 60000, vsaoi: 0, dzivibasIemaksas: 6000 }, n2026).r9, 4000);
+  assert.equal(gadaDeklaracija({ d3Apliekamie: 10000, vsaoi: 0, dzivibasIemaksas: 6000 }, n2026).r9, 1000);
+  assert.equal(gadaDeklaracija({ d3Apliekamie: 10000, vsaoi: 0, dzivibasIemaksas: 600 }, n2026).r9, 600);
+});

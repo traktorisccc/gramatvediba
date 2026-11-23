@@ -53,7 +53,7 @@ export function gadaDeklaracija(c, n) {
   const r1 = r2((c.d1Apliekamie || 0) + c.d3Apliekamie);
   const r6 = r2(c.vsaoi || 0);
   const r8 = r2(c.attaisnotie || 0);
-  const r9 = r2(Math.min(c.dzivibasIemaksas || 0, r2(r1 * n.dzivibasApdrosinasanaMaxDala / 100)));
+  const r9 = r2(Math.min(c.dzivibasIemaksas || 0, r2(r1 * n.dzivibasApdrosinasanaMaxDala / 100), n.dzivibasApdrosinasanaMaxSumma ?? Infinity));
   const r10 = r2(r6 + r8 + r9);
   const r11 = r2(n.neapliekamaisMinimumsMenesi * 12);
   const baze = r2(Math.max(0, r1 - r10 - r11));

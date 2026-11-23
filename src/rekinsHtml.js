@@ -7,7 +7,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 export const naudaLv = (x) => new Intl.NumberFormat('lv-LV', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
 export function datumsVardiem(iso) { const [g, m, d] = iso.split('-').map(Number); return `${g}. gada ${d}. ${MEN_LOK[m - 1]}`; }
 export const datumsLv = (iso) => iso ? iso.split('-').reverse().join('.') + '.' : '';
-export const rekinaNumursTeksts = (nr, veidne) => veidne === 'hanzas' ? `Nr. ${String(nr).padStart(3, '0')}` : `#${nr}`;
+/** Rēķina numurs kā identifikators: tāds pats PDF, XML un faila nosaukumā. */
+export const rekinaNumursId = (nr, veidne) => veidne === 'hanzas' ? String(nr).padStart(3, '0') : String(nr);
+export const rekinaNumursTeksts = (nr, veidne) => veidne === 'hanzas' ? `Nr. ${rekinaNumursId(nr, veidne)}` : `#${nr}`;
 
 export function rekinaKopsumma(r) { return r2(r.pozicijas.reduce((a, p) => a + r2(p.daudzums * p.cena), 0)); }
 
@@ -19,7 +21,7 @@ export function rekinsHtml(r, profils, pasutitajs) {
     ? { rek: 'INVOICE', pec: 'under contract No.', autors: 'Author', reg: 'Registration No.', adr: 'Address', poz: 'Item', cena: 'Price', daudz: 'Qty', kopa: 'Total', vardiem: 'Amount in words', termins: 'Payment due', metode: 'Payment method: bank transfer', periods: 'Service period', piezime: 'This invoice was prepared electronically and is valid without a signature. The issuer is not registered for VAT.' }
     : { rek: 'RĒĶINS', pec: 'saskaņā ar LĪGUMU NR.', autors: 'Autors', reg: 'Reģistrācijas Nr.', adr: 'Adrese', poz: 'Pozīcija', cena: 'Cena', daudz: 'Daudzums', kopa: 'Kopā', vardiem: 'Summa vārdiem', termins: 'Apmaksas termiņš', metode: 'Maksājuma metode: bankas pārskaitījums', periods: 'Pakalpojuma periods', piezime: 'Rēķins sagatavots elektroniski un ir derīgs bez paraksta. Rēķina izsniedzējs nav PVN maksātājs.' };
   const virsraksts = en ? `${esc(profils.vieta === 'Rīgā' ? 'Riga' : profils.vieta)}, ${r.datums}` : `${esc(profils.vieta)}, ${datumsVardiem(r.datums)}`;
-  return `<!DOCTYPE html><html lang="${en ? 'en' : 'lv'}"><head><meta charset="utf-8"><title>${L.rek} ${esc(rekinaNumursTeksts(r.nr, 'standarta'))}</title>
+  return `<!DOCTYPE html><html lang="${en ? 'en' : 'lv'}"><head><meta charset="utf-8"><title>${L.rek} ${esc(rekinaNumursTeksts(r.nr, pasutitajs.veidne))}</title>
 <style>
 @page { size: A4; margin: 18mm 16mm; }
 body { font-family: "Helvetica Neue", Arial, sans-serif; color: #111; font-size: 11pt; line-height: 1.45; margin: 0; }
@@ -36,7 +38,7 @@ tfoot td { border-bottom: 0; font-weight: 700; font-size: 12pt; }
 </style></head><body><div class="lapa">
 ${profils.logo ? `<img class="logo" src="${profils.logo}" alt="">` : ''}
 <p class="vieta">${virsraksts}</p>
-<h1>${L.rek} ${esc(rekinaNumursTeksts(r.nr, 'standarta'))}${r.ligumaNr ? ` <span style="font-weight:400;font-size:11pt">(${L.pec} ${esc(r.ligumaNr)})</span>` : ''}</h1>
+<h1>${L.rek} ${esc(rekinaNumursTeksts(r.nr, pasutitajs.veidne))}${r.ligumaNr ? ` <span style="font-weight:400;font-size:11pt">(${L.pec} ${esc(r.ligumaNr)})</span>` : ''}</h1>
 <div class="puses">
 <p><b>${esc(pasutitajs.nosaukums)}</b>${L.reg} ${esc(pasutitajs.regNr)}<br>${esc(adreseTeksts(pasutitajs.adrese))}</p>
 <p><b>${L.autors}: ${esc(profils.vards)}</b>${L.reg} ${esc(profils.personasKods)}<br>IBAN: ${esc(profils.iban)}${profils.bic ? `<br>SWIFT/BIC: ${esc(profils.bic)}` : ''}<br>${L.adr}: ${esc(adreseTeksts(profils.adrese))}</p>

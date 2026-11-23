@@ -11,6 +11,23 @@
   "dzivibasApdrosinasanaMaxDala": 10,
   "attaisnotieMaxPersonai": 600,
   "iinVienaMaksajumaRobeza": 640,
-  "d3Rindas": { "ienemumi": "5", "izdevumi": "6", "apliekamie": "8" },
-  "dRindas": { "apliekamie": "1", "vsaoi": "6", "attaisnotie": "8", "dzivibasApdr": "9", "attaisnotieKopa": "10", "neapliekamais": "11", "nodoklis": "18", "citiNodokli": "19", "ieturetais": "23", "maksajams": "24", "parmaksa": "25" }
+  "d3Rindas": {
+    "ienemumi": "5",
+    "izdevumi": "6",
+    "apliekamie": "8"
+  },
+  "dRindas": {
+    "apliekamie": "1",
+    "vsaoi": "6",
+    "attaisnotie": "8",
+    "dzivibasApdr": "9",
+    "attaisnotieKopa": "10",
+    "neapliekamais": "11",
+    "nodoklis": "18",
+    "citiNodokli": "19",
+    "ieturetais": "23",
+    "maksajams": "24",
+    "parmaksa": "25"
+  },
+  "dzivibasApdrosinasanaMaxSumma": 4000
 }

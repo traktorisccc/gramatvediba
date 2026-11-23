@@ -11,6 +11,7 @@ function adrese(a) {
 }
 
 function puse(p) {
+  p = { ...p, regNr: String(p.regNr ?? '').replace(/[\s-]/g, '') };
   return `<cac:Party>${t('EndpointID', p.regNr, ` schemeID="${p.eas || '0218'}"`)}`
     + `<cac:PartyName>${t('Name', p.nosaukums)}</cac:PartyName>${adrese(p.adrese)}`
     + `<cac:PartyLegalEntity>${t('RegistrationName', p.nosaukums)}${t('CompanyID', p.regNr)}</cac:PartyLegalEntity>`

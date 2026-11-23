@@ -33,3 +33,48 @@ test('Nezināms ienākums netiek klusi izslēgts', () => {
   assert.equal(k[2].kategorija, 'ignorets');
   assert.equal(s.sakrit, true);
 });
+
+// ---- Pārbaudē atrastās kļūdas (10.11.2026.): šie gadījumi vairs nedrīkst tikt atpazīti automātiski ----
+import { klasificet as kl, nosaukumiSakrit, bezMaksajuma, nolasitSwedbankCsv as nol } from '../src/banka.js';
+const tx = (o) => ({ datums: '2026-03-01', partneris: '', info: '', summa: 0, valuta: 'EUR', virziens: 'K', arhivaKods: String(Math.random()), ...o });
+const REG = () => ({ savsVards: 'Jānis Paraugs', noteikumi: {}, rekini: [{ id: 'r30', nr: 30, summa: 340, pasutitajs: 'Hanzas Perons' }], autorligumi: [{ id: 'a5', nr: '5', summa: 9999, pasutitajs: 'Dailes teātris' }, { id: 'a1', nr: '3-2-40/25', summa: 4000, pasutitajs: 'Dailes teātris' }] });
+
+test('Tukšs vai īss maksātāja nosaukums ar vienādu summu nav ienākums', () => {
+  assert.equal(kl([tx({ info: 'ATGRIEZTS DAR. veikals', summa: 340 })], REG())[0].kategorija, 'kartes-atgriesana');
+  assert.equal(kl([tx({ partneris: 'PERONS', info: 'dāvana', summa: 340 })], REG())[0].kategorija, 'jaizverte');
+  assert.equal(kl([tx({ partneris: 'AB', info: 'x', summa: 340 })], REG())[0].kategorija, 'jaizverte');
+  assert.equal(nosaukumiSakrit('HANZAS PERONS SIA', 'Hanzas Perons'), true);
+  assert.equal(nosaukumiSakrit('LIEPĀJAS CENTRĀLĀ ADMINISTRĀCIJA', 'Liepāja 2027'), false);
+});
+
+test('Īss līguma numurs netiek meklēts tekstā; garš tiek atrasts tikai kā atsevišķs gabals', () => {
+  assert.equal(kl([tx({ partneris: 'KĀDS CITS', info: 'Par pusdienām 15.03', summa: 20 })], REG())[0].kategorija, 'jaizverte');
+  assert.equal(kl([tx({ partneris: 'DAILES TEĀTRIS VSIA', info: 'Izmaksu saraksts Nr.1880 Autora līg.3-2-40/25', summa: 1500 })], REG())[0].kategorija, 'sd');
+  assert.equal(kl([tx({ partneris: 'CITS', info: 'pasūtījums 13-2-40/255', summa: 10 })], REG())[0].kategorija, 'jaizverte');
+});
+
+test('Otrs maksājums tam pašam rēķinam netiek ieskaitīts klusi', () => {
+  const k = kl([tx({ partneris: 'HANZAS PERONS SIA', info: 'Rēķ.Nr.030', summa: 340 }), tx({ partneris: 'HANZAS PERONS SIA', info: 'Rēķ.Nr.030', summa: 340 })], REG());
+  assert.deepEqual(k.map((x) => x.kategorija), ['sd', 'jaizverte']);
+  const jauSamaksats = { ...REG(), rekini: [{ id: 'r30', nr: 30, summa: 340, pasutitajs: 'Hanzas Perons', samaksats: 340 }] };
+  assert.equal(kl([tx({ partneris: 'HANZAS PERONS SIA', info: 'Rēķ.Nr.030', summa: 340 })], jauSamaksats)[0].kategorija, 'jaizverte');
+});
+
+test('Autorlīguma maksājumi pa daļām; pārsniegums jāizvērtē', () => {
+  const k = kl([2500, 1500, 500].map((s) => tx({ partneris: 'DAILES TEĀTRIS VSIA', info: 'Autora līg.3-2-40/25', summa: s })), REG());
+  assert.deepEqual(k.map((x) => x.kategorija), ['sd', 'sd', 'jaizverte']);
+});
+
+test('Maksājums citā valūtā netiek nolasīts kā eiro', () => {
+  assert.equal(kl([tx({ partneris: 'US CLIENT INC', info: 'Invoice', summa: 1000, valuta: 'USD' })], REG())[0].citaValuta, true);
+});
+
+test('Daļēji apmaksāts rēķins paliek neapmaksāto sarakstā', () => {
+  const reg = REG(), dar = [{ kategorija: 'sd', summa: 100, saite: { tips: 'rekins', kods: 'r30', nr: 30 } }];
+  assert.equal(bezMaksajuma(reg, dar).length, 1);
+  assert.equal(bezMaksajuma(reg, [...dar, { kategorija: 'sd', summa: 240, saite: { tips: 'rekins', kods: 'r30', nr: 30 } }]).length, 0);
+});
+
+test('Izraksta periods tiek nolasīts', () => {
+  assert.deepEqual(nol(csv).periods, { no: '2026-01-01', lidz: '2026-01-07' });
+});
