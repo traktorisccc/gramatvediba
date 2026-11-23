@@ -448,14 +448,15 @@ function skatsRekini(v) {
   ${saraksts.map((r) => { const p = pasutitajs(r.pasutitajsId), st = rekinaStatuss(r);
     const tags = st.pilniba ? `<span class="tag ok">${r.samaksatsCitur && !st.samaksats ? 'apmaksāts citā kontā' : 'apmaksāts'}</span>` : st.daleji ? `<span class="tag warn">daļēji, atlikums ${naudaLv(st.atlikums)}</span>` : r.termins < sodien() ? '<span class="tag warn">kavēts</span>' : '<span class="tag">gaida</span>';
     return `<tr><td>${h(rekinaNumursTeksts(r.nr, p.veidne))}</td><td>${datumsLv(r.datums)}</td><td class="wrap">${h(p.nosaukums)}${p.budzetaIestade ? ' <span class="tag">budžeta iestāde</span>' : ''}</td>
-    <td class="n">${naudaLv(st.kopa)}</td><td>${tags}</td>
-    <td><div class="row">${p.veidne === 'hanzas' ? `<button class="link" data-hanzas="${r.id}">Excel</button>` : `<button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button>`}${driveSaite(r.pdfDrive, 'PDF Drive')}${driveSaite(r.driveFails, p.veidne === 'hanzas' ? 'Excel Drive' : 'XML Drive')}<button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
+    <td class="n">${naudaLv(st.kopa)}</td><td>${tags}${r.nosutits ? `<div class="note" style="font-size:.78rem">nosūtīts ${datumsLv(r.nosutits)}</div>` : ''}</td>
+    <td class="act"><div class="row"><button class="link" data-sutit="${r.id}" style="color:var(--ink);font-weight:600">✉ Sūtīt</button>${p.veidne === 'hanzas' ? `<button class="link" data-hanzas="${r.id}">Excel</button>` : `<button class="link" data-pdf="${r.id}">PDF</button><button class="link" data-xml="${r.id}">XML</button>`}${driveSaite(r.pdfDrive, 'PDF Drive')}${driveSaite(r.driveFails, p.veidne === 'hanzas' ? 'Excel Drive' : 'XML Drive')}<button class="link" data-labot="${r.id}">Labot</button>${st.samaksats === 0 && !r.samaksatsCitur ? `<button class="link" data-dzest="${r.id}">Dzēst</button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Rēķinu vēl nav.</td></tr>'}
   </tbody></table></div>`;
   const atrast = (id) => dati.rekini.find((r) => r.id === id);
   if ($('#jauns')) $('#jauns').onclick = () => { rekinaForma = { pozicijas: [{ nosaukums: '', daudzums: 1, cena: '' }] }; radit(); };
   $$('[data-pdf]').forEach((b) => b.onclick = () => lejupieladetPdf(atrast(b.dataset.pdf)));
   $$('[data-xml]').forEach((b) => b.onclick = () => lejupieladetXml(atrast(b.dataset.xml)));
   $$('[data-hanzas]').forEach((b) => b.onclick = () => lejupieladetHanzas(atrast(b.dataset.hanzas)));
+  $$('[data-sutit]').forEach((b) => b.onclick = () => sutitRekinu(atrast(b.dataset.sutit)));
   $$('[data-labot]').forEach((b) => b.onclick = () => { const r = atrast(b.dataset.labot); rekinaForma = { ...r, labo: r.id, pozicijas: r.pozicijas.map((p) => ({ ...p })) }; radit(); window.scrollTo({ top: 0 }); });
   $$('[data-dzest]').forEach((b) => b.onclick = () => {
     const r = atrast(b.dataset.dzest), pedejais = r.nr === dati.profils.nakamaisNr - 1;
@@ -538,6 +539,68 @@ async function lejupieladetHanzas(r) {
     lejupieladet(blankasFailaVards(dati.profils.vards, r.datums, r.nr), x, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     toast('Hanzas Perons rēķins lejupielādēts');
   } catch (e) { toast(e.message); }
+}
+
+/** Rēķina fails sūtīšanai: Hanzas Perons — aizpildīta Excel blanka, pārējiem — PDF. */
+async function rekinaSutamaisFails(r) {
+  const p = pasutitajs(r.pasutitajsId);
+  if (p.veidne !== 'hanzas') return rekinaPdfFails(r);
+  if (!dati.hanzasBlanka?.fails) throw new Error('Vispirms ielādē Hanzas Perons blanku sadaļā „Iestatījumi”.');
+  return { nosaukums: blankasFailaVards(dati.profils.vards, r.datums, r.nr), saturs: await aizpilditBlanku(noBase64(dati.hanzasBlanka.fails), r, dati.profils),
+    tips: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+}
+/** E-pasta temats un teksts. */
+function rekinaVestule(r) {
+  const p = pasutitajs(r.pasutitajsId), nr = rekinaNumursTeksts(r.nr, p.veidne).replace(/^#/, ''), summa = naudaLv(rekinaKopsumma(r)), vards = dati.profils.vards || '';
+  const termins = datumsLv(r.termins).replace(/\.$/, '');
+  return r.valoda === 'en'
+    ? { temats: `Invoice No. ${nr}`, teksts: `Hello,\n\nPlease find attached invoice No. ${nr} for EUR ${summa}, due ${termins}.\n\nKind regards,\n${vards}` }
+    : { temats: `Rēķins Nr. ${nr}`, teksts: `Labdien!\n\nPielikumā rēķins Nr. ${nr} par ${summa} EUR, apmaksas termiņš ${termins}.\n\nAr cieņu,\n${vards}` };
+}
+/**
+ * Sūtīšana caur ierīces kopīgošanas izvēlni (Mail, Gmail u. c.) ar jau pievienotu failu.
+ * Divi soļi: logs sagatavo failu, un poga „Atvērt e-pastu” ir jauns klikšķis — Safari kopīgošanu atļauj tikai tieši pēc klikšķa.
+ * Rīks nekur pats neko nesūta un nesaņem pieeju e-pastam.
+ */
+async function sutitRekinu(r) {
+  const p = pasutitajs(r.pasutitajsId), { temats, teksts } = rekinaVestule(r), epasts = (p.epasts || '').trim();
+  const d = document.createElement('dialog'); d.className = 'dlg';
+  d.innerHTML = `<h3 style="margin-top:0">✉ Sūtīt rēķinu</h3>
+    <p style="margin:0 0 6px"><b>Kam:</b> ${epasts ? `${h(epasts)} <button class="link" data-k="epasts">Kopēt</button>` : '<span class="note">pasūtītājam nav e-pasta — to var ierakstīt sadaļā „Iestatījumi”</span>'}</p>
+    <p style="margin:0 0 6px"><b>Temats:</b> ${h(temats)}</p>
+    <p class="note" style="white-space:pre-line;margin:0 0 14px;border-left:3px solid var(--line);padding-left:10px">${h(teksts)}</p>
+    <p class="note" data-st style="margin:0 0 12px">Sagatavo failu…</p>
+    <div class="row"><button class="primary" data-k="sutit" disabled>Atvērt e-pastu ar pielikumu</button><button data-k="atcelt">Atcelt</button></div>
+    <p class="note" data-pk style="font-size:.8rem;margin-bottom:0">Atvērsies ierīces kopīgošanas izvēlne — izvēlies Mail vai Gmail. Saņēmēja adrese tiek nokopēta, ielīmē to laukā „Kam”.</p>`;
+  document.body.appendChild(d);
+  const beigt = () => { d.close(); d.remove(); };
+  d.addEventListener('cancel', (e) => { e.preventDefault(); beigt(); });
+  $('[data-k="atcelt"]', d).onclick = beigt;
+  if (epasts) $('[data-k="epasts"]', d).onclick = () => kopet(epasts);
+  d.showModal();
+  let fails;
+  try {
+    const f = await rekinaSutamaisFails(r);
+    fails = new File([f.saturs], f.nosaukums, { type: f.tips });
+  } catch (e) { $('[data-st]', d).textContent = e.message || 'Neizdevās sagatavot failu'; return; }
+  const varDalities = !!navigator.canShare?.({ files: [fails] });
+  $('[data-st]', d).textContent = `Pielikums: ${fails.name}`;
+  const poga = $('[data-k="sutit"]', d);
+  if (!varDalities) { poga.textContent = 'Lejupielādēt un atvērt e-pastu'; $('[data-pk]', d).textContent = 'Šis pārlūks nevar pievienot failu e-pastam pats: fails tiks lejupielādēts un atvērsies e-pasta programma ar aizpildītu adresi un tekstu — pievieno failu ar „Pievienot pielikumu”.'; }
+  poga.disabled = false;
+  poga.onclick = async () => {
+    if (epasts) navigator.clipboard?.writeText(epasts).catch(() => {});
+    if (varDalities) {
+      try { await navigator.share({ files: [fails], title: temats, text: teksts }); }
+      catch (e) { if (e.name !== 'AbortError') toast('Neizdevās atvērt kopīgošanu'); return; }
+    } else {
+      lejupieladet(fails.name, fails, fails.type);
+      location.href = `mailto:${encodeURIComponent(epasts)}?subject=${encodeURIComponent(temats)}&body=${encodeURIComponent(teksts)}`;
+      toast('Fails lejupielādēts — pievieno to e-pastam');
+    }
+    beigt();
+    r.nosutits = sodien(); saglabatUnRadit(varDalities ? 'Rēķins nodots e-pastam' : '');
+  };
 }
 
 // ---------- Autorlīgumi ----------
