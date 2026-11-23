@@ -15,7 +15,10 @@ Rīks nav nodokļu konsultants un neko neiesniedz EDS.
 - `src/rekinsHtml.js`, `src/summaVardiem.js` — rēķina izskats un summa vārdiem.
 - `src/rekviziti.js` — pasūtītāja rekvizītu sadalīšana pa laukiem no ielīmēta teksta.
 - `src/darbaVeidi.js` — darba veidi un nosacīto izdevumu normas.
-- `src/glabatuve.js` — datu glabāšana (pagaidām pārlūkā).
+- `src/glabatuve.js` — datu kopija pārlūkā (localStorage).
+- `src/drive.js` — Google Drive savienojums: pieslēgšanās (Google Identity Services), mapes un faili. Piekļuve tikai `drive.file`, piekļuves atslēga tikai atmiņā.
+- `src/sinhronizacija.js` — sinhronizācija starp pārlūku un Drive: konfliktu atpazīšana pēc faila versijas, ikdienas rezerves kopija Drive, viena konta slēdzene.
+- `privatums.html` — privātuma politika (Google prasa publicētai lietotnei).
 - `src/parskats.js`, `src/xlsx.js` — gada pārskats grāmatvedim Excel formātā (ar formulām), bez ārējām bibliotēkām.
 - `tests/` — publiskie testi ar VID piemēriem un izdomātiem datiem.
 
@@ -30,3 +33,11 @@ npm test
 ```
 
 Dati glabājas katra lietotāja paša Google Drive, nevis šajā repozitorijā vai kādā serverī.
+
+## Drošība
+
+- Nav sava servera; dati ir tikai lietotāja pārlūkā un viņa Google Drive.
+- `index.html` satur Content-Security-Policy: skripti tikai no pašas vietnes un Google pieslēgšanās, savienojumi tikai ar Google Drive API.
+- Google piekļuves atslēga netiek saglabāta pārlūka glabātuvē. Client ID nav slepens; Google to pieņem tikai no `traktorisccc.github.io`.
+- Pirms datu pārrakstīšanas Drive tiek saglabāta rezerves kopija mapē „Rezerves kopijas” (reizi dienā un katrā konfliktā).
+- Kodā un publiskajos testos nedrīkst būt īstu personas datu; testi ar īstiem datiem ir mapē `private/`, kas netiek publicēta.

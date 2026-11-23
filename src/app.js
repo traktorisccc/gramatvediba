@@ -7,6 +7,8 @@ import { rekinsHtml, rekinaKopsumma, rekinaNumursTeksts, rekinaNumursId, naudaLv
 import { sadalitRekvizitus } from './rekviziti.js';
 import { gadaParskats, VID_MAKSAJUMS } from './parskats.js';
 import { ieladet, saglabat, eksportet, importet, TUKSI_DATI } from './glabatuve.js';
+import * as drive from './drive.js';
+import { izveidotSinhronizatoru } from './sinhronizacija.js';
 
 // ---------- Pamata palīgi ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -45,10 +47,73 @@ function saglabatSesiju() {
   try { bankasSesija ? localStorage.setItem(SESIJAS_ATSLEGA, JSON.stringify(bankasSesija)) : localStorage.removeItem(SESIJAS_ATSLEGA); } catch { /* nav vietas: sesija paliek tikai atmiņā */ }
 }
 let bankasSesija = ieladetSesiju();
+
+// ---------- Google Drive ----------
+const DRIVE_ATSLEGA = 'gramatvediba:drive';
+function driveMeta() { try { return JSON.parse(localStorage.getItem(DRIVE_ATSLEGA) || '{}') || {}; } catch { return {}; } }
+function rakstitDriveMeta(m) { try { localStorage.setItem(DRIVE_ATSLEGA, JSON.stringify(m)); } catch { /* nav vietas */ } raditDriveStatusu(); }
+let driveKluda = '', sinhTaimeris = null;
+const sinh = izveidotSinhronizatoru({
+  drive, meta: driveMeta, rakstitMeta: rakstitDriveMeta, dati: () => dati,
+  aizstatDatus: (d) => { saglabat(d); dati = ieladet(); kess = {}; radit(); },
+  lokalaRezerve: (d) => { try { localStorage.setItem('gramatvediba:dati-pirms-drive', JSON.stringify(d)); } catch { /* nav vietas */ } },
+  piesaistitKontu: (e) => { if (dati.drive?.konts !== e) { dati.drive = { konts: e }; saglabat(dati); } },
+  uzTekstu: eksportet, noTeksta: importet, jautat: dialogs, apstiprinat: (teksts) => dialogs({ virsraksts: 'Google Drive', teksts, pogas: [{ id: 'ja', teksts: 'Jā' }, { id: 'ne', teksts: 'Nē' }] }).then((x) => x === 'ja'),
+  sodien: () => sodien(), tagad: () => new Date().toISOString()
+});
+function planotSinhronizaciju() {
+  clearTimeout(sinhTaimeris);
+  if (!drive.irAtslega()) { raditDriveStatusu(); return; }
+  sinhTaimeris = setTimeout(() => izpilditSinh(() => sinh.sinhronizet()), 1500);
+}
+async function izpilditSinh(fn) {
+  driveKluda = ''; raditDriveStatusu(true);
+  try {
+    const r = await fn();
+    if (r === 'lejupieladet') toast('Dati ielādēti no Google Drive');
+  } catch (e) { driveKluda = e.message || String(e); }
+  raditDriveStatusu();
+}
+const pieslegtDrive = () => izpilditSinh(() => sinh.savienot());
+function laiksLv(iso) { if (!iso) return ''; const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} ${datumsLv(isoLokali(d))}`; }
+/** Statusa josla virs satura. */
+function raditDriveStatusu(notiek = sinh?.aiznemts?.()) {
+  const el = $('#drive'); if (!el) return;
+  const m = driveMeta(), poga = (t) => `<button class="link" data-drive-pieslegt style="font-weight:600;color:var(--ink);text-decoration:underline">${t}</button>`;
+  let t;
+  if (notiek) t = 'Google Drive: sinhronizē…';
+  else if (driveKluda) t = `<span style="color:var(--warn)">${h(driveKluda)}</span> ${poga(m.konts ? 'Pieslēgties vēlreiz' : 'Mēģināt vēlreiz')}`;
+  else if (!m.konts) t = `Dati glabājas tikai šajā pārlūkā. ${poga('Pieslēgt Google Drive')}`;
+  else if (!drive.irAtslega()) t = `Google Drive: ${h(m.konts)} · ${m.mainits ? '<b>ir izmaiņas, kas vēl nav Drive</b>' : `pēdējā sinhronizācija ${laiksLv(m.sinhronizets)}`} ${poga('Pieslēgties')}`;
+  else t = `Google Drive: ${h(m.konts)} · ${m.mainits ? 'gaida saglabāšanu…' : `sinhronizēts ${laiksLv(m.sinhronizets)} ✓`}`;
+  el.innerHTML = t;
+  const b = $('[data-drive-pieslegt]', el); if (b) b.onclick = pieslegtDrive;
+}
+/** Modāls jautājums ar pogām. Atgriež izvēlētās pogas id. */
+function dialogs({ virsraksts, teksts, pogas }) {
+  return new Promise((ok) => {
+    const d = document.createElement('dialog');
+    d.className = 'dlg';
+    d.innerHTML = `<h3 style="margin-top:0">${h(virsraksts)}</h3><p style="white-space:pre-line">${h(teksts)}</p><div class="row">${pogas.map((p, i) => `<button data-id="${h(p.id)}" class="${i === 0 ? 'primary' : ''}">${h(p.teksts)}</button>`).join('')}</div>`;
+    document.body.appendChild(d);
+    const beigt = (id) => { d.close(); d.remove(); ok(id); };
+    $$('button', d).forEach((b) => b.onclick = () => beigt(b.dataset.id));
+    d.addEventListener('cancel', (e) => { e.preventDefault(); beigt(pogas[pogas.length - 1].id); });
+    d.showModal();
+  });
+}
+window.addEventListener('beforeunload', (e) => { const m = driveMeta(); if (m.konts && m.mainits) { e.preventDefault(); e.returnValue = ''; } });
 let kess = {};                                                     // aprēķinu kešs vienam zīmējumam
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
-function saglabatUnRadit(zina) { if (!saglabat(dati)) toast('Neizdevās saglabāt pārlūkā'); else if (zina) toast(zina); radit(); }
+/** Lietotāja izmaiņa: saglabā pārlūkā un, ja pieslēgts Google Drive, sinhronizē. */
+function saglabatDati() {
+  const ok = saglabat(dati);
+  const m = driveMeta();
+  if (m.konts) { rakstitDriveMeta({ ...m, mainits: true }); planotSinhronizaciju(); }
+  return ok;
+}
+function saglabatUnRadit(zina) { if (!saglabatDati()) toast('Neizdevās saglabāt pārlūkā'); else if (zina) toast(zina); radit(); }
 function lejupieladet(nosaukums, saturs, tips) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([saturs], { type: tips })); a.download = nosaukums;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -565,9 +630,13 @@ function skatsIestatijumi(v) {
     <td><input type="checkbox" data-budz="${x.id}" ${x.budzetaIestade ? 'checked' : ''} style="width:auto;min-height:0"></td>
     <td>${dati.rekini.some((r) => r.pasutitajsId === x.id) || dati.autorligumi.some((l) => l.pasutitajsId === x.id) ? '' : `<button class="link" data-dz="${x.id}">Dzēst</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="note">Pasūtītājus pievieno, izrakstot rēķinu.</td></tr>'}
   </tbody></table></div>
+  <h3>Google Drive</h3><div class="panel">${driveMeta().konts ? `<p style="margin-top:0">Pieslēgts kontam <b>${h(driveMeta().konts)}</b>. Dati glabājas Google Drive mapē „${drive.SAKNES_MAPE}” un šajā pārlūkā. Pirms datu pārrakstīšanas Drive katru dienu tiek saglabāta rezerves kopija mapē „${drive.REZERVJU_MAPE}”.</p>
+    <div class="row"><button id="drSinh">Sinhronizēt tagad</button></div>`
+    : `<p style="margin-top:0">Pieslēdz Google Drive, lai dati būtu drošībā un pieejami arī citās ierīcēs. Rīks redzēs tikai paša izveidotos failus.</p><div class="row"><button id="drSinh" class="primary">Pieslēgt Google Drive</button></div>`}
+    <p class="note">Piekļuvi jebkurā brīdī vari atsaukt Google konta iestatījumos: myaccount.google.com/permissions. <a href="privatums.html">Privātuma politika</a></p></div>
   <h3>Dati</h3><div class="panel"><p class="note" style="margin-top:0">Rezerves kopija satur visus tavus datus. Glabā to drošā vietā.</p>
     <div class="row"><button id="eksp">Lejupielādēt rezerves kopiju</button><label class="check" style="cursor:pointer"><span>Atjaunot no faila</span><input type="file" id="imp" accept=".json" hidden></label>
-    <button id="dzestVisu" class="link">Dzēst visus datus šajā pārlūkā</button></div></div>`;
+    <button id="dzestVisu" class="link">${driveMeta().konts ? 'Dzēst datus no šī pārlūka (Drive paliek)' : 'Dzēst visus datus šajā pārlūkā'}</button></div></div>`;
   const f = $('#pf'); let jaunsLogo = null;
   f.onsubmit = (e) => {
     e.preventDefault();
@@ -583,8 +652,16 @@ function skatsIestatijumi(v) {
   $$('[data-budz]').forEach((el) => el.onchange = () => { dati.pasutitaji.find((x) => x.id === el.dataset.budz).budzetaIestade = el.checked; saglabatUnRadit(); });
   $$('[data-dz]').forEach((b) => b.onclick = () => { dati.pasutitaji = dati.pasutitaji.filter((x) => x.id !== b.dataset.dz); saglabatUnRadit('Pasūtītājs dzēsts'); });
   $('#eksp').onclick = () => lejupieladet(`gramatvediba-${sodien()}.json`, eksportet(dati), 'application/json');
-  $('#imp').onchange = async (e) => { try { const d = importet(await e.target.files[0].text()); if (confirm('Aizstāt pašreizējos datus ar rezerves kopiju?')) { dati = d; saglabat(dati); dati = ieladet(); saglabatUnRadit('Dati atjaunoti'); } } catch (err) { toast(err.message); } };
-  $('#dzestVisu').onclick = () => { if (confirm('Dzēst visus datus šajā pārlūkā? Rezerves kopija netiks dzēsta.')) { dati = TUKSI_DATI(); bankasSesija = null; saglabatSesiju(); saglabatUnRadit('Dati dzēsti'); } };
+  $('#imp').onchange = async (e) => { try { const d = importet(await e.target.files[0].text()); if (confirm(driveMeta().konts ? 'Aizstāt pašreizējos datus ar rezerves kopiju? Tie aizstās arī datus Google Drive (iepriekšējie paliks Drive rezerves kopijā).' : 'Aizstāt pašreizējos datus ar rezerves kopiju?')) { saglabat(d); dati = ieladet(); saglabatUnRadit('Dati atjaunoti'); } } catch (err) { toast(err.message); } };
+  $('#dzestVisu').onclick = () => {
+    const m = driveMeta();
+    if (!confirm(m.konts ? 'Dzēst datus no šī pārlūka un atvienot Google Drive? Dati Google Drive netiks dzēsti: pieslēdzoties vēlreiz, tie ielādēsies atpakaļ.' : 'Dzēst visus datus šajā pārlūkā? Rezerves kopija netiks dzēsta.')) return;
+    if (m.mainits && m.konts && !confirm('Uzmanību: daļa izmaiņu vēl nav saglabāta Google Drive un tiks zaudēta. Turpināt?')) return;
+    rakstitDriveMeta({}); drive.aizmirstAtslegu(); driveKluda = '';            // vispirms atvieno, lai tukšie dati netiktu augšupielādēti
+    try { localStorage.removeItem('gramatvediba:dati-pirms-drive'); } catch { /* nav svarīgi */ }
+    dati = TUKSI_DATI(); bankasSesija = null; saglabatSesiju(); saglabatUnRadit('Dati dzēsti no šī pārlūka');
+  };
+  if ($('#drSinh')) $('#drSinh').onclick = () => drive.irAtslega() ? izpilditSinh(() => sinh.sinhronizet()).then(radit) : pieslegtDrive().then(radit);
 }
 
 // ---------- Maršruti un sākums ----------
@@ -601,5 +678,5 @@ window.addEventListener('hashchange', radit);
     const { gadi } = await (await fetch('rules/index.json')).json();
     for (const g of gadi) noteikumi[g] = await (await fetch(`rules/${g}.json`)).json();
   } catch { $('#view').innerHTML = '<p class="banner">Neizdevās ielādēt noteikumu failus. Rīks jāatver caur tīmekļa adresi, nevis kā fails no datora.</p>'; return; }
-  radit();
+  radit(); raditDriveStatusu();
 })();

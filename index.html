@@ -2,6 +2,8 @@
 <html lang="lv">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Grāmatvedība</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
@@ -46,6 +48,7 @@ tr:last-child td{border-bottom:0}td.wrap{min-width:180px}
 .banner{border-left:6px solid var(--mark);background:var(--surface);padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:.92rem}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+.dlg{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:22px;max-width:min(520px,calc(100vw - 32px))}.dlg::backdrop{background:rgba(0,0,0,.45)}
 .poz{display:grid;grid-template-columns:1fr 90px 120px auto;gap:8px;align-items:end;margin-bottom:8px}
 @media (max-width:600px){h1{font-size:1.8rem}.poz{grid-template-columns:1fr 1fr}.poz label:first-child{grid-column:1/-1}}
 [hidden]{display:none!important}
@@ -58,7 +61,7 @@ tr:last-child td{border-bottom:0}td.wrap{min-width:180px}
 <a href="#parskats">Pārskats</a><a href="#rekini">Rēķini</a><a href="#ligumi">Autorlīgumi</a><a href="#banka">Banka</a>
 <a href="#ceturksnis">Ceturkšņa ziņojums</a><a href="#deklaracija">Gada deklarācija</a><a href="#iestatijumi">Iestatījumi</a>
 </nav>
-<div class="banner">Dati pagaidām glabājas tikai šajā pārlūkā. Regulāri lejupielādē rezerves kopiju sadaļā „Iestatījumi”. Google Drive savienojums būs nākamajā posmā.</div>
+<div class="banner" id="drive" role="status">Dati glabājas tikai šajā pārlūkā.</div>
 <main id="view"><p class="note">Ielādē…</p></main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
