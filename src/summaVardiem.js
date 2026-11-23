@@ -47,16 +47,18 @@ function dalit(summa) {
   return { eiro: Math.floor(centi / 100), centi: centi % 100 };
 }
 
-/** "Pieci tūkstoši trīs simti eiro, 00 centi". arCentiem=false → "Astoņi simti divdesmit eiro." */
-export function summaVardiemLv(summa, { arCentiem = true } = {}) {
+/** "Viens tūkstotis eiro un sešdesmit astoņi centi"; bez centiem → "Viens tūkstotis eiro". */
+export function summaVardiemLv(summa) {
   const { eiro, centi } = dalit(summa);
   const pamats = `${lielais(veselsSkaitlisLv(eiro))} eiro`;
-  if (!arCentiem) return `${pamats}.`;
-  return `${pamats}, ${String(centi).padStart(2, '0')} ${vienskaitlis(centi) ? 'cents' : 'centi'}`;
+  if (!centi) return pamats;
+  return `${pamats} un ${veselsSkaitlisLv(centi)} ${vienskaitlis(centi) ? 'cents' : 'centi'}`;
 }
 
-/** "Five thousand three hundred euros and 00 cents" */
+/** "One thousand euros and sixty-eight cents"; bez centiem → "One thousand euros". */
 export function summaVardiemEn(summa) {
   const { eiro, centi } = dalit(summa);
-  return `${lielais(veselsSkaitlisEn(eiro))} ${eiro === 1 ? 'euro' : 'euros'} and ${String(centi).padStart(2, '0')} ${centi === 1 ? 'cent' : 'cents'}`;
+  const pamats = `${lielais(veselsSkaitlisEn(eiro))} ${eiro === 1 ? 'euro' : 'euros'}`;
+  if (!centi) return pamats;
+  return `${pamats} and ${veselsSkaitlisEn(centi)} ${centi === 1 ? 'cent' : 'cents'}`;
 }

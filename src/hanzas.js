@@ -18,8 +18,7 @@ export function periodsTeksts(no, lidz) {
   return `no\n${datumsLocijuma(no, 'gen')} līdz ${datumsLocijuma(lidz, 'dat')}`;
 }
 export function summaVardiemBlankai(x) {
-  const t = Math.abs(x - Math.round(x)) < 0.005 ? summaVardiemLv(x, { arCentiem: false }) : summaVardiemLv(x);
-  return t.endsWith('.') ? t : t + '.';
+  return `${summaVardiemLv(x)}.`;
 }
 const BANKAS = { HABA: 'Swedbank, AS', UNLA: 'SEB banka, AS', PARX: 'Citadele banka, AS', RIKO: 'Luminor Bank AS', LLBB: 'Signet Bank, AS', NDEA: 'Luminor Bank AS' };
 export const bankasNosaukums = (bic) => BANKAS[String(bic || '').slice(0, 4).toUpperCase()] || '';
