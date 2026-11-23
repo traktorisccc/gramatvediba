@@ -772,16 +772,23 @@ function pasutitajaLabosana(x) {
 function importetPasutitajus(saraksts) {
   if (!Array.isArray(saraksts)) throw new Error('Failā jābūt pasūtītāju sarakstam.');
   const nos = (t) => normalizetNosaukumu(t || '');
-  let pievienoti = 0, izlaisti = 0;
+  let pievienoti = 0, papildinati = 0, izlaisti = 0;
   for (const x of saraksts) {
     if (!x?.nosaukums) { izlaisti++; continue; }
     const jau = dati.pasutitaji.find((p) => (x.regNr && p.regNr === x.regNr) || nos(p.nosaukums) === nos(x.nosaukums));
-    if (jau) { if (!jau.biezums && x.biezums) jau.biezums = x.biezums; izlaisti++; continue; }
+    if (jau) {                                                     // esošam pasūtītājam aizpilda tikai tukšos laukus, neko nepārraksta
+      let papildinats = false;
+      const liec = (obj, k, v) => { if (v && !obj[k]) { obj[k] = String(v); papildinats = true; } };
+      for (const k of ['regNr', 'epasts', 'konts', 'banka', 'bic']) liec(jau, k, x[k]);
+      jau.adrese ||= {}; for (const k of ['iela', 'pilseta', 'indekss']) liec(jau.adrese, k, x.adrese?.[k]);
+      if (!jau.biezums && x.biezums) jau.biezums = x.biezums;
+      papildinats ? papildinati++ : izlaisti++; continue;
+    }
     dati.pasutitaji.push({ id: uid(), nosaukums: String(x.nosaukums), regNr: String(x.regNr || ''), adrese: { iela: '', pilseta: '', indekss: '', valsts: 'LV', ...(x.adrese || {}) },
       epasts: String(x.epasts || ''), konts: String(x.konts || ''), banka: String(x.banka || ''), bic: String(x.bic || ''), veidne: x.veidne === 'hanzas' ? 'hanzas' : 'standarta', budzetaIestade: !!x.budzetaIestade, biezums: Number(x.biezums) || 0 });
     pievienoti++;
   }
-  return { pievienoti, izlaisti };
+  return { pievienoti, papildinati, izlaisti };
 }
 function skatsIestatijumi(v) {
   const p = dati.profils, a = p.adrese;
@@ -841,7 +848,7 @@ function skatsIestatijumi(v) {
     laboPas = null; saglabatUnRadit('Pasūtītājs saglabāts');
   };
   $('#impPas').onchange = async (e) => {
-    try { const r = importetPasutitajus(JSON.parse(await e.target.files[0].text())); saglabatUnRadit(`Pievienoti ${r.pievienoti} pasūtītāji${r.izlaisti ? `, ${r.izlaisti} jau bija` : ''}`); }
+    try { const r = importetPasutitajus(JSON.parse(await e.target.files[0].text())); saglabatUnRadit(`Pievienoti: ${r.pievienoti}, papildināti: ${r.papildinati}${r.izlaisti ? `, bez izmaiņām: ${r.izlaisti}` : ''}`); }
     catch (err) { toast(err.message || 'Neizdevās nolasīt failu'); }
   };
   $('#eksp').onclick = () => lejupieladet(`gramatvediba-${sodien()}.json`, eksportet(dati), 'application/json');
