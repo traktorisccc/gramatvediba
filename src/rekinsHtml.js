@@ -45,7 +45,7 @@ ${profils.logo ? `<img class="logo" src="${profils.logo}" alt="">` : ''}
 </div>
 ${r.periods ? `<p>${L.periods}: ${datumsLv(r.periods.no)} – ${datumsLv(r.periods.lidz)}</p>` : ''}
 <table><thead><tr><th>Nr.</th><th>${L.poz}</th><th class="n">${L.cena}</th><th class="n">${L.daudz}</th><th class="n">${L.kopa}</th></tr></thead><tbody>
-${r.pozicijas.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.nosaukums)}</td><td class="n">${naudaLv(p.cena)}</td><td class="n">${esc(p.daudzums)}</td><td class="n">${naudaLv(r2(p.daudzums * p.cena))}</td></tr>`).join('')}
+${r.pozicijas.map((p, i) => `<tr><td>${i + 1}</td><td style="white-space:pre-line">${esc(p.nosaukums)}</td><td class="n">${naudaLv(p.cena)}</td><td class="n">${esc(p.daudzums)}</td><td class="n">${naudaLv(r2(p.daudzums * p.cena))}</td></tr>`).join('')}
 </tbody><tfoot><tr><td></td><td>${L.kopa}</td><td></td><td></td><td class="n">${naudaLv(kopa)} EUR</td></tr></tfoot></table>
 <p class="vardiem">${L.vardiem}: ${esc(en ? summaVardiemEn(kopa) : summaVardiemLv(kopa))}</p>
 <div class="apaksa"><p>${L.termins}: ${datumsLv(r.termins)}</p><p>${L.metode}</p><p>${L.piezime}</p></div>

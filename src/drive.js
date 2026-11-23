@@ -100,13 +100,31 @@ export async function izveidotFailu(nosaukums, mapesId, saturs, tips = 'applicat
   const robeza = 'gramatvediba' + Math.random().toString(36).slice(2);
   const meta = JSON.stringify({ name: nosaukums, parents: [mapesId], mimeType: tips });
   const body = new Blob([`--${robeza}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${robeza}\r\nContent-Type: ${tips}\r\n\r\n`, saturs, `\r\n--${robeza}--`]);
-  return pieprasit(`${UPLOAD}/files?uploadType=multipart&fields=id,version,modifiedTime`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${robeza}` }, body });
+  return pieprasit(`${UPLOAD}/files?uploadType=multipart&fields=id,version,modifiedTime,webViewLink`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${robeza}` }, body });
 }
 
 /** Pārraksta esoša faila saturu. */
 export const atjaunotFailu = (id, saturs, tips = 'application/json') =>
-  pieprasit(`${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=media&fields=id,version,modifiedTime`, { method: 'PATCH', headers: { 'Content-Type': tips }, body: saturs });
+  pieprasit(`${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=media&fields=id,version,modifiedTime,webViewLink`, { method: 'PATCH', headers: { 'Content-Type': tips }, body: saturs });
 
 /** Kopija citā mapē (rezerves kopijām). */
 export const kopet = (id, nosaukums, mapesId) =>
   pieprasit(`${API}/files/${encodeURIComponent(id)}/copy?fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nosaukums, parents: [mapesId] }) });
+
+/**
+ * Saglabā failu mapē pēc ceļa (piem. ['2026', 'Rēķini']) zem saknes mapes; ja tāda nosaukuma fails jau ir, to pārraksta.
+ * kesh: { 'ceļš': mapesId } — lai katru reizi nemeklētu mapes; kļūdas gadījumā kešu notīra un mēģina vēlreiz.
+ */
+export async function saglabatMape(saknesId, cels, nosaukums, saturs, tips, kesh = {}) {
+  const meginat = async () => {
+    let vecaks = saknesId, atslega = '';
+    for (const dala of cels) {
+      atslega = atslega ? `${atslega}/${dala}` : dala;
+      vecaks = kesh[atslega] || (kesh[atslega] = await mape(dala, vecaks));
+    }
+    const esošs = await atrastFailu(nosaukums, vecaks);
+    return esošs ? atjaunotFailu(esošs.id, saturs, tips) : izveidotFailu(nosaukums, vecaks, saturs, tips);
+  };
+  try { return await meginat(); }
+  catch (e) { if (e.kods !== 'nav') throw e; for (const k of Object.keys(kesh)) delete kesh[k]; return meginat(); }
+}
