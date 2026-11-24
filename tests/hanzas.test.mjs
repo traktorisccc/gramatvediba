@@ -27,7 +27,7 @@ test('Teksti blankai', () => {
   assert.equal(periodsTeksts('2026-10-01', '2026-10-02'), 'no\n2026. gada 1. oktobra līdz 2026. gada 2. oktobrim');
   assert.equal(periodsTeksts('2026-03-05', '2026-03-05'), '2026. gada 5. martā');
   assert.equal(summaVardiemBlankai(500), 'Pieci simti eiro.');
-  assert.match(summaVardiemBlankai(340.5), /^Trīs simti četrdesmit eiro, 50 centi\.$/);
+  assert.match(summaVardiemBlankai(340.5), /^Trīs simti četrdesmit eiro un piecdesmit centi\.$/);
   assert.equal(blankasFailaVards('Ēriks Ūdris', '2026-01-02', 5), 'Eriks_Udris_Rekins_2026_Nr_005_Hanzas_perons.xlsx');
 });
 

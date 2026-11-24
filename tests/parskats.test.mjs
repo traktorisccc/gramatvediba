@@ -70,3 +70,18 @@ test('Ar darbību nesaistītie maksājumi: tikai kopsumma, bez maksātāja', () 
   assert.equal(citi[4], 120);
   assert.equal(kopa[4], 2000 + 80 + 120);
 });
+
+test('Žurnāls: ceturkšņu starpsummas, pozīcija un ienākumi ar jau samaksātiem nodokļiem', () => {
+  const lapas = parskatsLapas({ ...ie, ieraksti: ie.ieraksti.map((e, i) => i === 0 ? { ...e, pozicija: 'Scenogrāfija' } : e),
+    citiIeraksti: [{ datums: '2026-02-03', partneris: 'Teātris D', info: 'Autoratlīdzība', summa: 400, iemesls: 'Nodokļus samaksāja izmaksātājs', pozicija: '' }] });
+  const z = lapas.find((l) => l.nosaukums === 'Žurnāls'), k = sunas(z);
+  assert.equal(k.L1.v, 'Pozīcija'); assert.equal(k.L2, 'Scenogrāfija');
+  assert.equal(k.K4.v, 400); assert.equal(k.H4, '');                     // nav ieskaitīts aprēķinā
+  assert.equal(k.A5.v, '1. ceturksnis kopā'); assert.equal(k.H5.v, 2300); assert.match(k.H5.f, /^SUBTOTAL\(9,H2:H4\)$/);
+  assert.equal(k.A8.v, '2. ceturksnis kopā');
+  const gads = z.rindas.findIndex((r) => r?.[0]?.v === 'Gadā kopā') + 1;
+  assert.equal(k['H' + gads].v, 2450); assert.equal(k['K' + gads].v, 400); assert.match(k['H' + gads].f, /SUBTOTAL\(9,H2:H/);
+  // ceturkšņu lapa joprojām summē pa mēnešiem tikai SD ieņēmumus
+  const c = sunas(lapas.find((l) => l.nosaukums === 'Ceturkšņi'));
+  assert.ok(Object.values(c).some((x) => x?.f?.includes("SUMIFS('Žurnāls'!$H$2:$H$")));
+});

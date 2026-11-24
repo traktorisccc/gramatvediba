@@ -125,7 +125,7 @@ function ieliktSunu(xml, lapa, ref, vertiba) {
   if (c) { const jauna = sunaXml(ref, c.s, vertiba); xml = xml.replace(c.pilna, jauna); c.pilna = jauna; return xml; }
   const { rinda, kol } = sadalit(ref), jauna = sunaXml(ref, undefined, vertiba);
   const rm = new RegExp(`<row r="${rinda}"(?:\\s[^>]*?)?(?:/>|>([\\s\\S]*?)</row>)`).exec(xml);
-  if (!rm) throw new Error(`Blankā nav ${rinda}. rindas.`);
+  if (!rm) throw new Error(`Rēķina paraugā nav ${rinda}. rindas.`);
   if (rm[0].endsWith('/>')) return xml.replace(rm[0], rm[0].slice(0, -2) + `>${jauna}</row>`);
   const iekss = rm[1] || '', pec = [...iekss.matchAll(SUNA)].find((m) => sadalit(m[1]).kol > kol);
   const jaunsIekss = pec ? iekss.replace(pec[0], jauna + pec[0]) : iekss + jauna;
@@ -157,8 +157,8 @@ export async function parbauditBlanku(baiti) {
  */
 export async function aizpilditBlanku(baiti, r, profils) {
   const b = await atvertBlanku(baiti), { k, kludas } = kartet(b.lapa);
-  if (kludas.length) throw new Error(`Blankā nav atrasts: ${kludas.join(', ')}.`);
-  if (r.pozicijas.length > k.pozRindas.length) throw new Error(`Blankā ir vieta ${k.pozRindas.length} pozīcijai, bet rēķinā ir ${r.pozicijas.length}. Apvieno pozīcijas vienā.`);
+  if (kludas.length) throw new Error(`Rēķina paraugā nav atrasts: ${kludas.join(', ')}.`);
+  if (r.pozicijas.length > k.pozRindas.length) throw new Error(`Rēķina paraugā ir vieta ${k.pozRindas.length} pozīcijai, bet rēķinā ir ${r.pozicijas.length}. Apvieno pozīcijas vienā.`);
   const lapa = b.lapa, nobide = b.datums1904 ? 1462 : 0, datums = (iso) => excelDatums(iso) - nobide;
   let xml = b.xml;
   const liec = (ref, v) => { if (ref) xml = ieliktSunu(xml, lapa, ref, v); };

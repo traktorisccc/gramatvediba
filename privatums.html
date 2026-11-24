@@ -16,7 +16,7 @@ p,li{max-width:68ch}.note{color:var(--muted);font-size:.9rem}hr{border:0;border-
 <body>
 <main>
 <h1>Privātuma politika</h1>
-<p class="note">Grāmatvedības rīks · spēkā no 2026. gada 23. novembra</p>
+<p class="note">Grāmatvedības rīks · spēkā no 2026. gada 24. novembra</p>
 
 <p>Grāmatvedības rīks ir bezmaksas tīmekļa lietotne saimnieciskās darbības veicējiem: rēķiniem, bankas izraksta salīdzināšanai un nodokļu aprēķiniem. Rīkam nav sava servera, un tā autors tavus datus neredz un nesaņem.</p>
 
@@ -31,6 +31,8 @@ p,li{max-width:68ch}.note{color:var(--muted);font-size:.9rem}hr{border:0;border-
 <p>Rīks prasa tikai piekļuvi <code>drive.file</code>. Tā ļauj rīkam redzēt un mainīt tikai tos failus, ko tas pats izveidojis vai ko tu tam esi atvēris. Pārējie faili tavā Google Drive rīkam nav pieejami. Google piekļuves atslēga tiek turēta tikai atvērtās lapas atmiņā un netiek saglabāta.</p>
 <p>Rīka izmantotie Google lietotāja dati atbilst <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, ieskaitot Limited Use prasības.</p>
 
+<h2>E-pasta sūtīšana caur Gmail</h2>
+<p>Ja rēķinu sūti ar pogu „Nosūtīt no Gmail”, rīks tajā brīdī prasa atļauju <code>gmail.send</code> un tavu e-pasta adresi. Šī atļauja ļauj tikai nosūtīt vēstuli, ko tu pats esi pārskatījis rīka logā; rīks nevar lasīt, mainīt vai dzēst tavas vēstules. Vēstule ar rēķinu nonāk tikai tavā norādītajam saņēmējam un tavā Gmail mapē „Nosūtītie”. E-pasta adresi rīks izmanto tikai, lai pārbaudītu, ka sūti no tā paša Google konta, kuram piesaistīta grāmatvedība. Atļauja glabājas tikai lapas atmiņā un beidzas pēc stundas.</p>
 <h2>Kā dzēst datus</h2>
 <ul>
 <li>Rīka sadaļā „Iestatījumi” izvēlies „Dzēst visus datus šajā pārlūkā”.</li>
@@ -55,6 +57,8 @@ p,li{max-width:68ch}.note{color:var(--muted);font-size:.9rem}hr{border:0;border-
 <h2>Google Drive access</h2>
 <p>The app requests only the <code>drive.file</code> scope, which limits access to files the app created or that you opened with it. Other files in your Drive are not accessible. The Google access token is kept only in the memory of the open page and is never stored.</p>
 <p>The app’s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+<h2>Sending e-mail via Gmail</h2>
+<p>If you send an invoice with “Send from Gmail”, the app asks at that moment for the <code>gmail.send</code> scope and your e-mail address. This scope only allows sending a message you have reviewed in the app; the app cannot read, modify or delete your mail. The message goes only to the recipient you entered and to your Gmail “Sent” folder. The e-mail address is used only to check that you send from the same Google account the bookkeeping is linked to. The access token is kept only in page memory and expires after one hour.</p>
 <h2>Deleting data</h2>
 <p>Use “Delete all data in this browser” in Settings, delete the “Grāmatvedība” folder in Google Drive, and revoke access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
 <h2>Contact</h2>

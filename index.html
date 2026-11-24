@@ -2,7 +2,7 @@
 <html lang="lv">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com https://gmail.googleapis.com https://oauth2.googleapis.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Grāmatvedība</title>
@@ -18,7 +18,7 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1E2E63;--sky1:#0F1A40;--sky2:#2A3F7E;--surface:#1C222B;--ink:#E5E8EC;--muted:#A9B4C6;--line:#33405A;--field:#232A34;--mark:#FFD93D;--good:#6FC2A6;--warn:#E88C72;
  --navy:#3A4FB8;--bevel-l:#4A5670;--bevel-d:#0B0F16;--btn:#2A3240;--shadow:rgba(0,0,0,.45);color-scheme:dark}}
 *,*::before,*::after{box-sizing:inherit}
-html{background:var(--sky2)}
+html{background:var(--sky2);-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;min-height:100vh;display:flex;flex-direction:column;color:var(--ink);font:16px/1.5 var(--sans);-webkit-font-smoothing:antialiased;
  background:var(--augsa) repeat-x 0 0,linear-gradient(var(--sky1),var(--sky2) 520px) no-repeat,var(--sky2)}
 body>.wrap{max-width:1080px;width:100%;margin:0 auto;padding:96px 18px 32px;flex:1}
@@ -32,42 +32,46 @@ nav a{flex:none;padding:7px 12px;color:var(--ink);text-decoration:none;font-weig
 nav a:hover{background:var(--surface)}nav a[aria-current=page]{color:#fff;background:var(--navy);box-shadow:inset 2px 2px 0 var(--bevel-d),inset -2px -2px 0 var(--bevel-l)}
 h2{font:400 1.5rem/1.45 var(--serif);margin:0 0 12px}h3{font-size:1rem;margin:22px 0 10px}
 .lead{color:var(--muted);margin:0 0 18px;max-width:72ch}.note{color:var(--muted);font-size:.9rem;max-width:76ch}
-.panel{background:var(--surface);border:2px solid var(--ink);border-radius:0;padding:18px;box-shadow:5px 5px 0 var(--shadow)}
+.panel{background:var(--surface);border:0;border-radius:0;padding:18px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
 label{display:flex;flex-direction:column;gap:4px;font-size:.84rem;font-weight:600;color:var(--muted)}
 label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-weight:500}
-input,select,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:40px;width:100%}
+input,select,textarea{font:inherit;font-weight:400;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:40px;width:100%}
 label.check input{width:auto;min-height:0}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-button{font:inherit;font-weight:600;cursor:pointer;border-radius:0;border:1px solid var(--ink);background:var(--btn);color:var(--ink);padding:8px 14px;min-height:40px;
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:0;border:1px solid var(--bevel-d);background:var(--btn);color:var(--ink);padding:8px 14px;min-height:40px;
  box-shadow:inset -2px -2px 0 var(--bevel-d),inset 2px 2px 0 var(--bevel-l)}
 button:active:not(:disabled){box-shadow:inset 2px 2px 0 var(--bevel-d),inset -2px -2px 0 var(--bevel-l)}
 button.primary{background:var(--navy);color:#fff;box-shadow:inset -2px -2px 0 rgba(0,0,0,.45),inset 2px 2px 0 rgba(255,255,255,.4)}
 button.link{border:0;background:none;color:var(--muted);padding:4px 6px;min-height:0;font-weight:500;box-shadow:none}
 button:disabled{opacity:.45;cursor:not-allowed}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.tbl{overflow-x:auto;border:2px solid var(--ink);background:var(--surface);box-shadow:5px 5px 0 var(--shadow)}
+.tbl{overflow-x:auto;background:var(--surface)}
 table{width:100%;border-collapse:collapse;font-size:.93rem}th,td{padding:8px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:.82rem;color:var(--muted);background:var(--field);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 tr:last-child td{border-bottom:0}td.act .row{flex-wrap:nowrap;white-space:nowrap}td.wrap{min-width:180px}
-.eds th{background:#e7eaf0;color:#1b2433}.eds td.c{cursor:copy}.eds td.c:hover{background:var(--field)}
+.eds th{background:var(--field);color:var(--ink)}.eds td.c{cursor:copy}.eds td.c:hover{background:var(--field)}
 .big{font:400 1.5rem/1.5 var(--serif);font-variant-numeric:tabular-nums;white-space:nowrap}
-.hl{background:linear-gradient(transparent 55%,var(--mark) 55%);padding:0 2px}
+.hl{text-decoration:underline;text-decoration-color:var(--mark);text-decoration-thickness:4px;text-underline-offset:7px;text-decoration-skip-ink:none}
 .tag{display:inline-block;font-size:.76rem;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
 .tag.ok{border-color:var(--good);color:var(--good)}.tag.warn{border-color:var(--warn);color:var(--warn)}
-.banner{border:2px solid var(--ink);border-left:8px solid var(--mark);background:var(--surface);padding:10px 16px;margin-bottom:18px;font-size:.92rem}
-.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#FFFFE1;color:#000;border:1px solid #000;box-shadow:3px 3px 0 rgba(0,0,0,.35);padding:10px 16px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
+.banner{border:0;border-left:8px solid var(--mark);background:var(--surface);padding:10px 16px;margin-bottom:18px;font-size:.92rem}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#FFFFE1;color:#000;border:1px solid #000;padding:10px 16px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
 .toast.on{opacity:1}
 .datums{display:flex;position:relative;align-items:stretch}.datums .dtxt{flex:1;border-top-right-radius:0;border-bottom-right-radius:0}.datums .dbtn{border-top-left-radius:0;border-bottom-left-radius:0;border-left:0;padding:0 10px;background:var(--field);color:var(--muted)}.datums .dpick{position:absolute;left:0;bottom:0;width:1px;height:1px;min-height:0;opacity:0;pointer-events:none;padding:0;border:0}
-.dlg{border:2px solid var(--ink);border-radius:0;background:var(--surface);color:var(--ink);padding:0 22px 22px;max-width:min(520px,calc(100vw - 32px));box-shadow:6px 6px 0 rgba(0,0,0,.35)}
+.dlg{border:0;border-radius:0;background:var(--surface);color:var(--ink);padding:0 22px 22px;max-width:min(560px,calc(100vw - 32px))}
 .dlg>h3:first-child{margin:0 -22px 16px!important;padding:6px 12px;background:linear-gradient(90deg,var(--navy),#1084D0);color:#fff;font-size:.95rem}
 .dlg::backdrop{background:rgba(0,30,80,.4)}
 footer{height:120px;flex:none;background:var(--apaksa) repeat-x 0 100%;display:flex;justify-content:center;align-items:flex-start;gap:8px;padding-top:6px;flex-wrap:wrap}
-.poga88{display:inline-block;width:88px;height:31px;border:2px outset #ddd;background:#000080;color:#fff;font:700 9px/1.15 var(--sans);text-align:center;padding:3px 2px;letter-spacing:.02em;text-transform:uppercase;overflow:hidden}
+.poga88{display:inline-flex;align-items:center;justify-content:center;flex:none;width:88px;height:31px;border:2px outset #ddd;background:#000080;color:#fff;font:700 8px/1.2 var(--sans);text-align:center;padding:2px;letter-spacing:0;text-transform:uppercase;white-space:nowrap;overflow:hidden}
 .poga88.dz{background:#FFD93D;color:#000}.poga88.z{background:#2E7D3A}
 .poz{display:grid;grid-template-columns:1fr 90px 120px auto;gap:8px;align-items:end;margin-bottom:8px}
-@media (max-width:600px){h1{font-size:1.5rem}h2{font-size:1rem}.big{font-size:1rem}body>.wrap{padding-top:70px}body{background-size:auto 72px,auto,auto}footer{background-size:auto 72px;height:96px}.poga88:nth-child(n+3){display:none}.poz{grid-template-columns:1fr 1fr}.poz label:first-child{grid-column:1/-1}}
+@media (max-width:600px){h1{font-size:1.5rem}h2{font-size:1rem}.big{font-size:1rem}body>.wrap{padding-top:70px}body{background-size:auto 72px,auto,auto}footer{background-size:auto 72px;height:96px}.poz{grid-template-columns:1fr 1fr}.poz label:first-child{grid-column:1/-1}}
+@media (max-width:700px){table.pas thead{display:none}table.pas tr{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:10px 11px;border-bottom:1px solid var(--line)}
+ table.pas td{border:0;padding:0}table.pas td:first-child{grid-column:1/-1}table.pas td[data-l]::before{content:attr(data-l);color:var(--muted);font-size:.8rem;margin-right:6px}
+ table.pas td select{min-height:34px;padding:4px 8px}}
+table.zurn{font-size:.86rem}table.zurn td.wrap{min-width:110px}table.zurn td,table.zurn th{padding:7px 8px}table.zurn tr.kop td{background:var(--field)}table.zurn tr.atstarpe td{padding:0;height:14px;border:0;background:var(--sky2)}table.zurn tr.cits td{color:var(--muted)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -75,7 +79,7 @@ footer{height:120px;flex:none;background:var(--apaksa) repeat-x 0 100%;display:f
 <div class="wrap">
 <header><h1>Grāmatvedība<small>Autoratlīdzības, rēķini un nodokļi saimnieciskās darbības veicējam</small></h1></header>
 <nav id="nav">
-<a href="#parskats">Pārskats</a><a href="#rekini">Rēķini</a><a href="#ligumi">Autorlīgumi</a><a href="#banka">Banka</a>
+<a href="#parskats">Pārskats</a><a href="#rekini">Rēķini</a><a href="#ligumi">Autorlīgumi</a><a href="#banka">Banka</a><a href="#zurnals">Žurnāls</a>
 <a href="#ceturksnis">Ceturkšņa ziņojums</a><a href="#deklaracija">Gada deklarācija</a><a href="#iestatijumi">Iestatījumi</a>
 </nav>
 <div class="banner" id="drive" role="status">Dati glabājas tikai šajā pārlūkā.</div>

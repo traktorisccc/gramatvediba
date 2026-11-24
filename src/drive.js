@@ -19,7 +19,7 @@ export class DriveKluda extends Error {
 }
 
 /** Ielādē Google pieslēgšanās skriptu (vienreiz). */
-function ieladetGis() {
+export function ieladetGis() {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
   return new Promise((ok, slikti) => {
     const s = document.createElement('script');
@@ -49,7 +49,7 @@ export async function pieslegties(konts) {
       ok();
     };
     const error_callback = (e) => slikti(new DriveKluda(e?.type === 'popup_failed_to_open' ? 'Pārlūks bloķēja Google logu. Atļauj uznirstošos logus šai vietnei.' : 'Google logs tika aizvērts.', e?.type || 'popup'));
-    tokenKlients = window.google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, callback, error_callback, ...(konts ? { login_hint: konts } : {}) });
+    tokenKlients = window.google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, include_granted_scopes: false, callback, error_callback, ...(konts ? { login_hint: konts } : {}) });
     tokenKlients.requestAccessToken({ prompt: '' });
   });
 }

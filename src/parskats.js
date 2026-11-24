@@ -4,6 +4,7 @@
 import { r2, menesuIenakumi, ceturksnaZinojums, d3, gadaDeklaracija } from './calc.js';
 import { DARBA_VEIDI } from './darbaVeidi.js';
 import { xlsxFails } from './xlsx.js';
+import { zurnals } from './zurnals.js';
 
 const MENESI = ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris'];
 export const VID_MAKSAJUMS = 'Maksājums VID';
@@ -56,20 +57,31 @@ export function parskatsLapas(ie) {
   ] };
 
   // ---------- Žurnāls ----------
-  const zp = 2, zb = Math.max(zp, zp + ieraksti.length - 1), zk = zb + 1;   // pirmā datu rinda, pēdējā, kopsummas rinda
-  const zurnals = { nosaukums: 'Žurnāls', platumi: [6, 12, 8, 34, 46, 30, 9, 13, 15, 13], iesaldet: 1, rindas: [
+  // Pa ceturkšņiem: datu rindas, starpsumma (SUBTOTAL, lai gada kopsumma to neieskaita divreiz), tukša rinda.
+  const zj = zurnals(ieraksti, ie.citiIeraksti || [], gads), zp = 2;
+  const zurnals_ = { nosaukums: 'Žurnāls', platumi: [6, 12, 8, 34, 46, 30, 9, 13, 15, 13, 15, 44], iesaldet: 1, rindas: [
     [T('Nr.', 'galva'), T('Datums', 'galva'), T('Mēnesis', 'galvaN'), T('Maksātājs', 'galva'), T('Dokuments / maksājuma mērķis', 'galva'), T('Darba veids', 'galva'),
-      T('Norma, %', 'galvaN'), T('Ieņēmumi, €', 'galvaN'), T('Nosacītie izdevumi, € (žurnāla 20. aile)', 'galvaN'), T('Ienākums, €', 'galvaN')],
-    ...ieraksti.map((e, i) => {
-      const r = zp + i, nor = DARBA_VEIDI[e.veids]?.norma ?? 0;
-      return [i + 1, T(e.datums, 'datums'), { v: Number(e.datums.slice(5, 7)), f: `MONTH(B${r})` }, e.partneris || '', e.info || '',
-        `${e.veids} ${DARBA_VEIDI[e.veids]?.nosaukums || ''}`.trim(), nor, N(e.summa), N(e.summa * nor / 100, `H${r}*G${r}/100`), N(e.summa - e.summa * nor / 100, `H${r}-I${r}`)];
-    })
+      T('Norma, %', 'galvaN'), T('Ieņēmumi, €', 'galvaN'), T('Nosacītie izdevumi, € (žurnāla 20. aile)', 'galvaN'), T('Ienākums, €', 'galvaN'),
+      T('Nav ieskaitīts nodokļu aprēķinā, €', 'galvaN'), T('Pozīcija', 'galva')]
   ] };
-  if (!ieraksti.length) zurnals.rindas.push([T('Šajā gadā nav saimnieciskās darbības ieņēmumu.', 'piezime')]);
-  zurnals.rindas[zk - 1] = [T('Kopā', 'b'), '', '', '', '', '', '', N(x3.ienemumi, `SUM(H${zp}:H${zb})`, 'naudaB'),
-    N(ieraksti.reduce((a, e) => a + e.summa * (DARBA_VEIDI[e.veids]?.norma ?? 0) / 100, 0), `SUM(I${zp}:I${zb})`, 'naudaB'), N(ieraksti.reduce((a, e) => a + e.summa * (100 - (DARBA_VEIDI[e.veids]?.norma ?? 0)) / 100, 0), `SUM(J${zp}:J${zb})`, 'naudaB')];
-  zurnals.rindas.push([], [T('Ieņēmumi uzskaitīti naudas saņemšanas dienā (pēc bankas izraksta). Nosacītie izdevumi = ieņēmumi × darba veida norma. Ienākumi, no kuriem nodokļus samaksāja izmaksātājs, un AKKA/LAA atlīdzības šeit neietilpst, sk. lapu „Banka”.', 'piezime')]);
+  const ST = (k, a, b, v) => N(v, `SUBTOTAL(9,${k}${a}:${k}${b})`, 'naudaB');
+  for (const c of zj.ceturksni) {
+    if (!c.rindas.length) continue;
+    const no = zurnals_.rindas.length + 1;
+    for (const e of c.rindas) {
+      const r = zurnals_.rindas.length + 1;
+      zurnals_.rindas.push(e.sd
+        ? [e.nr, T(e.datums, 'datums'), { v: Number(e.datums.slice(5, 7)), f: `MONTH(B${r})` }, e.partneris, e.info, e.veidaTeksts, e.norma,
+            N(e.ienemumi), N(e.ienemumi * e.norma / 100, `H${r}*G${r}/100`), N(e.ienemumi - e.ienemumi * e.norma / 100, `H${r}-I${r}`), '', e.pozicija]
+        : [e.nr, T(e.datums, 'datums'), { v: Number(e.datums.slice(5, 7)), f: `MONTH(B${r})` }, e.partneris, e.info, e.veidaTeksts, '', '', '', '', N(e.neieskaitits), e.pozicija]);
+    }
+    const lidz = zurnals_.rindas.length;
+    zurnals_.rindas.push([T(`${c.c}. ceturksnis kopā`, 'b'), '', '', '', '', '', '', ST('H', no, lidz, c.kopa.ienemumi), ST('I', no, lidz, c.kopa.nosacitie), ST('J', no, lidz, c.kopa.ienakums), ST('K', no, lidz, c.kopa.neieskaitits)], []);
+  }
+  const zb = Math.max(zp, zurnals_.rindas.length);
+  if (zurnals_.rindas.length === 1) zurnals_.rindas.push([T('Šajā gadā nav saimnieciskās darbības ieņēmumu.', 'piezime')]);
+  zurnals_.rindas.push([T('Gadā kopā', 'b'), '', '', '', '', '', '', ST('H', zp, zb, zj.kopa.ienemumi), ST('I', zp, zb, zj.kopa.nosacitie), ST('J', zp, zb, zj.kopa.ienakums), ST('K', zp, zb, zj.kopa.neieskaitits)]);
+  zurnals_.rindas.push([], [T('Ieņēmumi uzskaitīti naudas saņemšanas dienā (pēc bankas izraksta). Nosacītie izdevumi = ieņēmumi × darba veida norma. Kolonnā „Nav ieskaitīts nodokļu aprēķinā” ir ienākumi, no kuriem nodokļus jau samaksāja izmaksātājs vai AKKA/LAA: tie redzami pilnībai, bet neietilpst ceturkšņa ziņojumos un D3.', 'piezime')]);
   const Z = (k) => `'Žurnāls'!$${k}$${zp}:$${k}$${zb}`;
 
   // ---------- Ceturkšņi ----------
@@ -211,7 +223,7 @@ export function parskatsLapas(ie) {
 
   const irRl = ie.rekini.length > 0 || ie.ligumi.length > 0;       // bez rēķiniem un līgumiem lapa tikai mulsinātu
   kop.rindas = kop.rindas.filter((r) => irRl || r[0] !== 'Rēķini un līgumi');   // saraksts „Lapas” ir aiz formulu rindām
-  return [kop, zurnals, cet, dek, banka, ...(irRl ? [rl] : []), noteikumi];
+  return [kop, zurnals_, cet, dek, banka, ...(irRl ? [rl] : []), noteikumi];
 }
 
 export const gadaParskats = (ievade) => xlsxFails(parskatsLapas(ievade));
