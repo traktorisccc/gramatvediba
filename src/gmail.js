@@ -5,7 +5,7 @@ import { CLIENT_ID, ieladetGis } from './drive.js';
 
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const SCOPE = `openid email ${GMAIL_SCOPE}`;            // e-pasts vajadzīgs, lai pārbaudītu, ka sūta no grāmatvedības konta
-const SUTIT = 'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media';
+const SUTIT = 'https://www.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media';   // tas pats augšupielādes serviss, ko izmanto Drive
 const TOKENINFO = 'https://oauth2.googleapis.com/tokeninfo';
 
 export class GmailKluda extends Error {
@@ -109,7 +109,9 @@ export async function atlauja(konts = '') {
 /** Nosūta sagatavotu vēstuli. Atgriež Gmail vēstules id. */
 export async function nosutit(vestule) {
   if (!gmailKonts()) throw new GmailKluda('Nav e-pasta sūtīšanas atļaujas.', 'atslega');
-  const r = await fetch(SUTIT, { method: 'POST', headers: { Authorization: `Bearer ${atslega.token}`, 'Content-Type': 'message/rfc822' }, body: vestule });
+  let r;
+  try { r = await fetch(SUTIT, { method: 'POST', headers: { Authorization: `Bearer ${atslega.token}`, 'Content-Type': 'message/rfc822' }, body: vestule }); }
+  catch { throw new GmailKluda('Gmail atbilde nepienāca, tāpēc nav zināms, vai vēstule aizgāja. Pārbaudi Gmail mapi „Nosūtītie”, pirms sūti vēlreiz.', 'neskaidrs'); }
   if (r.ok) return (await r.json()).id;
   const k = await r.json().catch(() => ({})), iemesls = k?.error?.errors?.[0]?.reason || k?.error?.status || '', zina = String(k?.error?.message || '');
   if (r.status === 401) { atslega = null; throw new GmailKluda('Gmail atļauja beigusies. Spied „Nosūtīt” vēlreiz.', 'atslega'); }

@@ -584,7 +584,7 @@ async function rekinaSutamaisFails(r) {
 }
 /** E-pasta temats un teksts. */
 function rekinaVestule(r) {
-  const p = pasutitajs(r.pasutitajsId), nr = rekinaNumursTeksts(r.nr, p.veidne).replace(/^#/, ''), summa = naudaLv(rekinaKopsumma(r)), vards = dati.profils.vards || '';
+  const p = pasutitajs(r.pasutitajsId), nr = rekinaNumursTeksts(r.nr, p.veidne).replace(/^(#|Nr\.\s*)/, ''), summa = naudaLv(rekinaKopsumma(r)), vards = dati.profils.vards || '';
   const termins = datumsLv(r.termins).replace(/\.$/, '');
   return r.valoda === 'en'
     ? { temats: `Invoice No. ${nr}`, teksts: `Hello,\n\nPlease find attached invoice No. ${nr} for EUR ${summa}, due ${termins}.\n\nKind regards,\n${vards}` }
@@ -620,7 +620,7 @@ async function sutitRekinu(r) {
     <p class="note" data-k="info" style="font-size:.8rem;margin-bottom:0">Vēstule aizies no tava Gmail${konts ? ` (${h(konts)})` : ''} un būs redzama mapē „Nosūtītie”. Pirmo reizi Google prasīs atļauju sūtīt e-pastus: rīks var tikai sūtīt, lasīt tavu pastu tas nevar.</p>`;
   document.body.appendChild(d);
   const k = (x) => $(`[data-k="${x}"]`, d);
-  let url = null, sutaPasreiz = false;
+  let url = null, sutaPasreiz = false, neskaidrs = false;
   const beigt = () => { if (sutaPasreiz) return; if (url) setTimeout(() => URL.revokeObjectURL(url), 60_000); d.close(); d.remove(); };
   d.addEventListener('cancel', (e) => { e.preventDefault(); beigt(); });
   k('atcelt').onclick = beigt;
@@ -637,6 +637,7 @@ async function sutitRekinu(r) {
   k('sutit').disabled = false;
   k('sutit').onclick = async () => {
     const kam = k('kam').value.trim();
+    if (neskaidrs && !confirm('Iepriekšējā vēstule, iespējams, jau aizgāja. Vai tiešām sūtīt vēlreiz?')) return;
     if (!gmail.derigaAdrese(kam)) { toast('Ievadi derīgu saņēmēja e-pasta adresi (vienu).'); k('kam').focus(); return; }
     const poga = k('sutit'), st = $('[data-st]', d);
     sutaPasreiz = true; poga.disabled = true; k('atcelt').disabled = true;
@@ -653,7 +654,12 @@ async function sutitRekinu(r) {
       saglabatUnRadit(`Rēķins nosūtīts uz ${kam}`);
     } catch (e) {
       sutaPasreiz = false; poga.disabled = false; k('atcelt').disabled = false; poga.textContent = 'Nosūtīt no Gmail';
-      st.innerHTML = `<span style="color:var(--warn)">${h(e.message || 'Neizdevās nosūtīt.')}</span> Vēstule netika nosūtīta.`;
+      if (e.kods === 'neskaidrs') {
+        // Pieprasījums aizgāja, bet atbilde nepienāca: vēstule, iespējams, ir nosūtīta. Atkārtota sūtīšana tikai pēc apstiprinājuma.
+        neskaidrs = true; poga.textContent = 'Sūtīt vēlreiz';
+        st.innerHTML = `<span style="color:var(--warn)">${h(e.message)}</span> <button class="link" data-k="aizgaja" style="color:var(--ink);font-weight:600">Vēstule aizgāja — atzīmēt kā nosūtītu</button>`;
+        k('aizgaja').onclick = () => { beigt(); r.nosutits = sodien(); r.nosutitsKam = kam; if (k('saglabat')?.checked && !p.epasts && dati.pasutitaji.includes(p)) p.epasts = kam; saglabatUnRadit('Atzīmēts kā nosūtīts'); };
+      } else st.innerHTML = `<span style="color:var(--warn)">${h(e.message || 'Neizdevās nosūtīt.')}</span> Vēstule netika nosūtīta.`;
     }
   };
 }
