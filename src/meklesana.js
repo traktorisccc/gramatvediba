@@ -24,3 +24,24 @@ export function filtretRekinus(rekini, f = {}) {
 }
 
 export const filtrsAktivs = (f = {}) => !!(String(f.teksts || '').trim() || f.pasutitajsId || f.no || f.lidz);
+
+/**
+ * Bankas darījumu filtrs. f: { teksts, kategorija, virziens ('K'|'D'), no, lidz, konts, bezSaites }.
+ * teksts meklē maksātājā un mērķī (+ papildTeksts(d), piem., rēķina pozīcijas). bezSaites: tikai ienākumi bez rēķina vai līguma.
+ */
+export function filtretDarijumus(darijumi, f = {}, papildTeksts = () => '') {
+  const vardi = normalizet(f.teksts).split(/[^a-z0-9]+/).filter(Boolean).map(celms);
+  return darijumi.filter((d) => {
+    if (f.kategorija && d.kategorija !== f.kategorija) return false;
+    if (f.virziens && d.virziens !== f.virziens) return false;
+    if (f.no && d.datums < f.no) return false;
+    if (f.lidz && d.datums > f.lidz) return false;
+    if (f.konts && d.konts !== f.konts) return false;
+    if (f.bezSaites && (d.virziens === 'D' || d.saite || !['sd', 'nodokli-samaksaja-izmaksatajs'].includes(d.kategorija))) return false;
+    if (!vardi.length) return true;
+    const t = normalizet(`${d.partneris || ''} ${d.info || ''} ${papildTeksts(d) || ''}`);
+    return vardi.every((v) => t.includes(v));
+  });
+}
+
+export const darijumuFiltrsAktivs = (f = {}) => !!(String(f.teksts || '').trim() || f.kategorija || f.virziens || f.no || f.lidz || f.konts || f.bezSaites);

@@ -17,7 +17,7 @@ export const KOLEKCIJAS = {
   pasutitaji: { atslega: (x) => x.id || `n:${x.nosaukums}`, nosaukums: (x) => `pasūtītājs ${x.nosaukums || ''}`.trim() },
   darijumi: { atslega: darijumaAtslega, nosaukums: (x) => `bankas darījums ${x.datums} ${x.summa} €` }
 };
-const KARTES = ['maksataji', 'gadi'];          // atslēga → vērtība
+const KARTES = ['maksataji', 'gadi', 'samaksas', 'konti', 'izraksti'];          // atslēga → vērtība
 const NEMAINAMIE = ['versija', 'eksportets'];
 
 /** Viena vērtība trīspusēji. Atgriež { v } vai { konflikts: true }. */
@@ -65,7 +65,7 @@ export function apvienot(baze, lok, att) {
       const ir = (x) => Object.prototype.hasOwnProperty.call(x, k);
       if (ir(L) && ir(A)) {
         const r = viens(B[k], L[k], A[k], irBaze && ir(B));
-        if (r.konflikts) { o[k] = A[k]; konflikti.push({ kur: kart, atslega: k, nosaukums: kart === 'gadi' ? `${k}. gada dati` : `maksātājs ${k}`, l: L[k], a: A[k] }); }
+        if (r.konflikts) { o[k] = A[k]; konflikti.push({ kur: kart, atslega: k, nosaukums: ({ gadi: `${k}. gada dati`, samaksas: `nodokļu samaksas atzīme ${k}`, konti: `konta nosaukums ${k}`, izraksti: `izraksts ${k}` })[kart] || `maksātājs ${k}`, l: L[k], a: A[k] }); }
         else o[k] = r.v;
       } else if (ir(L)) { if (!(irBaze && ir(B) && vien(B[k], L[k]))) o[k] = L[k]; }
       else if (!(irBaze && ir(B) && vien(B[k], A[k]))) o[k] = A[k];

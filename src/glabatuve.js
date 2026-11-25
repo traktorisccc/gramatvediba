@@ -5,6 +5,9 @@ export const TUKSI_DATI = () => ({
   versija: 1,
   profils: { vards: '', personasKods: '', adrese: { iela: '', pilseta: '', indekss: '', valsts: 'LV' }, iban: '', bic: '', epasts: '', vieta: 'Rīgā', logo: '', nakamaisNr: 1 },
   pasutitaji: [], rekini: [], autorligumi: [], darijumi: [], maksataji: {},
+  samaksas: {},  // '2026-C1' → { zinots, maksajumi: [{ summa, datums }] }: atzīmes „Iesniegts un samaksāts”
+  konti: {},     // IBAN → { nosaukums }
+  izraksti: {},  // 'IBAN|no|lidz' → { konts, no, lidz }: ielādētie izraksti
   gadi: {} // gads → { d1Apliekamie, d1Ieturetais, citiNodokli, dzivibasIemaksas, attaisnotie, vsaoiDeklareta }
 });
 

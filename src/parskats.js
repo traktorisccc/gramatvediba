@@ -62,7 +62,7 @@ export function parskatsLapas(ie) {
   const zurnals_ = { nosaukums: 'Žurnāls', platumi: [6, 12, 8, 34, 46, 30, 9, 13, 15, 13, 15, 44], iesaldet: 1, rindas: [
     [T('Nr.', 'galva'), T('Datums', 'galva'), T('Mēnesis', 'galvaN'), T('Maksātājs', 'galva'), T('Dokuments / maksājuma mērķis', 'galva'), T('Darba veids', 'galva'),
       T('Norma, %', 'galvaN'), T('Ieņēmumi, €', 'galvaN'), T('Nosacītie izdevumi, € (žurnāla 20. aile)', 'galvaN'), T('Ienākums, €', 'galvaN'),
-      T('Nav ieskaitīts nodokļu aprēķinā, €', 'galvaN'), T('Pozīcija', 'galva')]
+      T('Nodokļi jau samaksāti (aprēķinā neiet), €', 'galvaN'), T('Pozīcija', 'galva')]
   ] };
   const ST = (k, a, b, v) => N(v, `SUBTOTAL(9,${k}${a}:${k}${b})`, 'naudaB');
   for (const c of zj.ceturksni) {
@@ -81,11 +81,11 @@ export function parskatsLapas(ie) {
   const zb = Math.max(zp, zurnals_.rindas.length);
   if (zurnals_.rindas.length === 1) zurnals_.rindas.push([T('Šajā gadā nav saimnieciskās darbības ieņēmumu.', 'piezime')]);
   zurnals_.rindas.push([T('Gadā kopā', 'b'), '', '', '', '', '', '', ST('H', zp, zb, zj.kopa.ienemumi), ST('I', zp, zb, zj.kopa.nosacitie), ST('J', zp, zb, zj.kopa.ienakums), ST('K', zp, zb, zj.kopa.neieskaitits)]);
-  zurnals_.rindas.push([], [T('Ieņēmumi uzskaitīti naudas saņemšanas dienā (pēc bankas izraksta). Nosacītie izdevumi = ieņēmumi × darba veida norma. Kolonnā „Nav ieskaitīts nodokļu aprēķinā” ir ienākumi, no kuriem nodokļus jau samaksāja izmaksātājs vai AKKA/LAA: tie redzami pilnībai, bet neietilpst ceturkšņa ziņojumos un D3.', 'piezime')]);
+  zurnals_.rindas.push([], [T('Ieņēmumi uzskaitīti naudas saņemšanas dienā (pēc bankas izraksta). Nosacītie izdevumi = ieņēmumi × darba veida norma. Kolonnā „Nodokļi jau samaksāti” ir ienākumi, no kuriem nodokļus jau samaksāja izmaksātājs vai AKKA/LAA: tie redzami pilnībai, bet neietilpst ceturkšņa ziņojumos un D3.', 'piezime')]);
   const Z = (k) => `'Žurnāls'!$${k}$${zp}:$${k}$${zb}`;
 
   // ---------- Ceturkšņi ----------
-  const cet = { nosaukums: 'Ceturkšņi', platumi: [16, 13, 13, 13, 14, 14, 16, 14, 14], iesaldet: 1, rindas: [
+  const cet = { nosaukums: 'Ceturkšņi', platumi: [16, 13, 13, 13, 14, 14, 16, 14, 14, 44], iesaldet: 1, rindas: [
     [T('Mēnesis', 'galva'), T('Ieņēmumi', 'galvaN'), T('Nosacītie izdevumi', 'galvaN'), T('Ienākums', 'galvaN'), T('VSAOI objekts', 'galvaN'), T('VSAOI (31,07 %)', 'galvaN'),
       T('Objekts pensiju apdr. 10 %', 'galvaN'), T('Pensiju apdr. 10 %', 'galvaN'), T('Kopā mēnesī', 'galvaN')]
   ] };
@@ -101,12 +101,12 @@ export function parskatsLapas(ie) {
     '', '', '', '', N(vsaoiAprekinata, sumC('I', 2, 13), 'naudaB')]);
   cet.rindas.push([]);
   cet.rindas.push([T('Ceturksnis', 'galva'), T('Ieņēmumi', 'galvaN'), T('Nosacītie izdevumi', 'galvaN'), T('Ienākums', 'galvaN'), T('VSAOI objekts', 'galvaN'), T('VSAOI (31,07 %)', 'galvaN'),
-    T('Objekts pensiju apdr. 10 %', 'galvaN'), T('Pensiju apdr. 10 %', 'galvaN'), T('Jāmaksā (ziņojumā)', 'galvaN')]);
+    T('Objekts pensiju apdr. 10 %', 'galvaN'), T('Pensiju apdr. 10 %', 'galvaN'), T('Jāmaksā (ziņojumā)', 'galvaN'), T('Iesniegts un samaksāts (atzīme rīkā)', 'galva')]);
   const cetPirma = cet.rindas.length + 1;                           // 17. rinda
   q.forEach((c, i) => {
     const a = 2 + i * 3, b = a + 2, mm = m.slice(i * 3, i * 3 + 3), sm = (k) => r2(mm.reduce((s, x) => s + x[k], 0));
     cet.rindas.push([`${i + 1}. ceturksnis`, N(sm('ienemumi'), sumC('B', a, b)), N(sm('nosacitie'), sumC('C', a, b)), N(sm('ienakums'), sumC('D', a, b)),
-      N(c.kopa.objekts, sumC('E', a, b)), N(c.kopa.vsaoi, sumC('F', a, b)), N(c.kopa.pensObjekts, sumC('G', a, b)), N(c.kopa.pens, sumC('H', a, b)), N(c.jaMaksa, `ROUND(F${cetPirma + i}+H${cetPirma + i},2)`, 'naudaB')]);
+      N(c.kopa.objekts, sumC('E', a, b)), N(c.kopa.vsaoi, sumC('F', a, b)), N(c.kopa.pensObjekts, sumC('G', a, b)), N(c.kopa.pens, sumC('H', a, b)), N(c.jaMaksa, `ROUND(F${cetPirma + i}+H${cetPirma + i},2)`, 'naudaB'), (ie.samaksas || [])[i] || '']);
   });
   const cetKopa = cet.rindas.length + 1;
   cet.rindas.push([T('Kopā', 'b'), '', '', '', '', '', '', '', N(vsaoiAprekinata, sumC('I', cetPirma, cetPirma + 3), 'naudaB')]);
