@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { sadalitRekvizitus } from '../src/rekviziti.js';
 
 test('Rekvizīti ar juridisko un faktisko adresi', () => {
-  const r = sadalitRekvizitus(`Nodibinājums “Nodibinājums Liepāja 2027”
-Juridiskā adrese: Rožu iela 6, Liepāja, Latvija, LV3401
-Faktiskā adrese: Dārza iela 4/8, 2.stāvs, Liepāja, Latvija, LV-3401
-Reģ. nr. 40008325039
+  const r = sadalitRekvizitus(`Nodibinājums “Nodibinājums Parauga fonds”
+Juridiskā adrese: Parauga iela 6, Liepāja, Latvija, LV3401
+Faktiskā adrese: Testa iela 4/8, 2.stāvs, Liepāja, Latvija, LV-3401
+Reģ. nr. 40008000001
 Banka: AS “SEB banka” Kods: UNLALV2X
-Konts: LV39UNLA0055003549403`);
-  assert.deepEqual(r, { nosaukums: 'Nodibinājums “Nodibinājums Liepāja 2027”', regNr: '40008325039', iela: 'Rožu iela 6', pilseta: 'Liepāja', indekss: 'LV-3401', valsts: 'LV', epasts: '',
-    konts: 'LV39UNLA0055003549403', banka: 'AS “SEB banka”', bic: 'UNLALV2X' });
+Konts: LV00UNLA0000000000002`);
+  assert.deepEqual(r, { nosaukums: 'Nodibinājums “Nodibinājums Parauga fonds”', regNr: '40008000001', iela: 'Parauga iela 6', pilseta: 'Liepāja', indekss: 'LV-3401', valsts: 'LV', epasts: '',
+    konts: 'LV00UNLA0000000000002', banka: 'AS “SEB banka”', bic: 'UNLALV2X' });
 });
 
 test('Rekvizīti īsā formā ar komatu aiz nosaukuma', () => {
