@@ -6,7 +6,12 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Grāmatvedība</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link rel="icon" type="image/png" href="ikonas/ikona-32.png">
+<link rel="apple-touch-icon" href="ikonas/ikona-180.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6EC3FF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Grāmatvedība">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Public+Sans:wght@400;500;600;700&display=swap&subset=latin-ext" rel="stylesheet">
 <style>
@@ -77,6 +82,8 @@ body{position:relative;z-index:0}
 .zibens{position:fixed;z-index:-1;top:96px;bottom:14px;right:4vw;aspect-ratio:32/103;background:var(--zibens) no-repeat right bottom/contain;image-rendering:pixelated;pointer-events:none}
 @media (max-width:700px){.zibens{top:70px;bottom:10px;right:2vw;opacity:.35}}
 @media print{.zibens{display:none}}
+body.sakums nav,body.sakums #drive{display:none}.sakums-p{max-width:520px;margin:40px auto;text-align:center}
+#drive.bezdrive{border-left-color:var(--warn)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -92,6 +99,7 @@ body{position:relative;z-index:0}
 <main id="view"><p class="note">Ielādē…</p></main>
 </div>
 <footer aria-hidden="true"><span class="poga88">Labāk skatāms<br>800×600</span><span class="poga88 dz">★ Taisīts<br>Latvijā ★</span><span class="poga88 z">Dati tikai<br>tavā Drive</span></footer>
+<div class="banner" id="jaunaVersija" role="status" hidden style="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:11;margin:0;max-width:calc(100vw - 24px)">Pieejama jauna rīka versija. <button class="primary" id="atjaunotVersiju" style="margin-left:8px;min-height:34px;padding:4px 12px">Atjaunot</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="src/app.js"></script>
 </body>

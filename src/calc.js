@@ -52,15 +52,18 @@ export function d3(ieraksti, gads) {
 export function gadaDeklaracija(c, n) {
   const r1 = r2((c.d1Apliekamie || 0) + c.d3Apliekamie);
   const r6 = r2(c.vsaoi || 0);
-  const r8 = r2(c.attaisnotie || 0);
   const r9 = r2(Math.min(c.dzivibasIemaksas || 0, r2(r1 * n.dzivibasApdrosinasanaMaxDala / 100), n.dzivibasApdrosinasanaMaxSumma ?? Infinity));
-  const r10 = r2(r6 + r8 + r9);
   const r11 = r2(n.neapliekamaisMinimumsMenesi * 12);
+  // Attaisnotos izdevumus (izglītība, ārstniecība) EDS izmanto ne vairāk kā gada griesti un tikai līdz nodoklim 0; pārējo pārnes.
+  const limits = r2(Math.max(0, r1 - r6 - r9 - r11));
+  const pieejami = r2(c.attaisnotie || 0);
+  const r8 = r2(Math.min(n.attaisnotieMaxPersonai ?? 600, pieejami, limits));
+  const r10 = r2(r6 + r8 + r9);
   const baze = r2(Math.max(0, r1 - r10 - r11));
   const zem = Math.min(baze, n.iinSlieksnis), virs = Math.max(0, baze - n.iinSlieksnis);
   const r18 = r2(r2(zem * n.iinLikme / 100) + r2(virs * n.iinAugstaLikme / 100));
   const r19 = r2(c.citiNodokli || 0);
   const r23 = r2(c.d1Ieturetais || 0);
   const starpiba = r2(r18 + r19 - r23);
-  return { r1, r6, r8, r9, r10, r11, baze, r18, r19, r23, r24: starpiba > 0 ? starpiba : 0, r25: starpiba < 0 ? -starpiba : 0 };
+  return { r1, r6, r8, r9, r10, r11, baze, r18, r19, r23, attaisnotieParnests: r2(Math.max(0, pieejami - r8)), r24: starpiba > 0 ? starpiba : 0, r25: starpiba < 0 ? -starpiba : 0 };
 }

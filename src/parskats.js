@@ -49,8 +49,8 @@ export function parskatsLapas(ie) {
     ['Neapliekamais minimums mēnesī, €', N(n.neapliekamaisMinimumsMenesi), ''],
     ['Dzīvības apdrošināšana: maks. daļa no ienākuma, %', n.dzivibasApdrosinasanaMaxDala, ''],
     ['Dzīvības apdrošināšana: maks. summa gadā, €', N(n.dzivibasApdrosinasanaMaxSumma ?? 999999999), ''],
+    ['Attaisnotie izdevumi (izglītība, ārstniecība): maks. gadā, €', N(n.attaisnotieMaxPersonai ?? 600), 'izmanto tikai līdz nodoklim 0, pārējo pārnes'],
     ['Avots', n.avots || '', ''],
-    [],
     [T('Darba veidi un nosacīto izdevumu normas (MK noteikumi Nr. 899, 57. punkts)', 'sadala')],
     [T('Kods', 'galva'), T('Norma, %', 'galvaN'), T('Nosaukums', 'galva')],
     ...Object.entries(DARBA_VEIDI).map(([k, v]) => [k, v.norma, v.nosaukums + (v.gaidaVid ? ' (gaida VID uzziņu)' : '') + (v.piezime ? ` (${v.piezime})` : '')])
@@ -127,13 +127,13 @@ export function parskatsLapas(ie) {
     ['D1: ieturētais nodoklis', '', N(num(g.d1Ieturetais), undefined, 'ievade'), 'no EDS D1 pielikuma'],                                          // 10
     ['Nodoklis no citiem ienākumiem', '', N(num(g.citiNodokli), undefined, 'ievade'), 'no EDS (D lapas 19. rinda)'],                               // 11
     ['Dzīvības apdrošināšanas iemaksas', '', N(num(g.dzivibasIemaksas), undefined, 'ievade'), 'pirms griestu piemērošanas'],                       // 12
-    ['Attaisnotie izdevumi (izglītība, ārstniecība, ziedojumi)', '', N(num(g.attaisnotie), undefined, 'ievade'), 'no EDS D4 pielikuma'],          // 13
+    ['Attaisnotie izdevumi pieejamie (D4: šī gada + pārnestie)', '', N(num(g.attaisnotie), undefined, 'ievade'), 'no EDS D4 pielikuma'],          // 13
     ['VSAOI pēc iesniegtajiem ceturkšņa ziņojumiem', '', vsaoiIr ? N(num(g.vsaoiDeklareta), undefined, 'ievade') : { v: '', s: 'ievade' }, 'tukšs = rīka aprēķins (Ceturkšņi)'], // 14
     [],
     [T('D lapa (aplēse)', 'galva'), T('Rinda', 'galvaN'), T('Summa, €', 'galvaN'), T('Kā iegūts', 'galva')],                                     // 16
     ['Latvijas Republikā gūtie apliekamie ienākumi', D.apliekamie, N(d.r1, 'ROUND(C9+C6,2)'), 'D1 + D3'],                                           // 17
     ['Valsts sociālās apdrošināšanas obligātās iemaksas', D.vsaoi, N(d.r6, `IF(C14="",'Ceturkšņi'!I${cetKopa},ROUND(C14,2))`), 'iesniegtā summa, citādi rīka aprēķins'], // 18
-    ['Attaisnotie izdevumi (izglītība, ārstniecība, ziedojumi)', D.attaisnotie, N(d.r8, 'ROUND(C13,2)'), ''],                                     // 19
+    ['Attaisnotie izdevumi (izglītība, ārstniecība, ziedojumi)', D.attaisnotie, N(d.r8, `ROUND(MIN(${NT}12,C13,MAX(0,C17-C18-C20-C22)),2)`), 'ne vairāk kā griesti un tikai līdz nodoklim 0'], // 19
     ['Pensiju fondi, dzīvības apdrošināšana', D.dzivibasApdr, N(d.r9, `ROUND(MIN(C12,ROUND(C17*${NT}10/100,2),${NT}11),2)`), 'ne vairāk kā daļa no ienākuma un gada griesti'], // 20
     ['Attaisnotie izdevumi kopā', D.attaisnotieKopa, N(d.r10, 'ROUND(C18+C19+C20,2)'), ''],                                                      // 21
     ['Gada neapliekamais minimums', D.neapliekamais, N(d.r11, `ROUND(${NT}9*12,2)`), 'mēneša summa × 12'],                                       // 22
@@ -143,9 +143,31 @@ export function parskatsLapas(ie) {
     ['Avansā samaksātais (ieturētais) nodoklis', D.ieturetais, N(d.r23, 'ROUND(C10,2)'), ''],                                                    // 26
     [T('Maksājamais nodoklis', 'b'), D.maksajams, N(d.r24, 'MAX(0,ROUND(C24+C25-C26,2))', 'naudaB'), ''],                                        // 27
     [T('Pārmaksātais nodoklis', 'b'), D.parmaksa, N(d.r25, 'MAX(0,-ROUND(C24+C25-C26,2))', 'naudaB'), ''],                                       // 28
+    ['Attaisnotie izdevumi, ko EDS pārnes uz nākamajiem gadiem', '', N(d.attaisnotieParnests, 'MAX(0,ROUND(C13-C19,2))'), 'izglītība un ārstniecība'], // 29
     [],
     [T('Rindu numuri atbilst EDS formai šim gadam. D lapa ir aplēse: EDS pievieno arī datus no citiem avotiem, tāpēc galīgais skaitlis jāsalīdzina ar EDS.', 'piezime')]
   ] };
+
+  // ---------- Kā aizpildīt EDS ----------
+  const ievaditi = ['d1Apliekamie', 'd1Ieturetais', 'citiNodokli', 'dzivibasIemaksas', 'attaisnotie', 'vsaoiDeklareta'].some((k) => g[k] !== undefined && g[k] !== '' && g[k] !== null);
+  const vs = ie.vidSalidzinajums, dat = (iso) => (iso || '').split('-').reverse().join('.');
+  const DARB = { ievadit: T('IERAKSTI EDS', 'bridinajums'), parbaudit: 'EDS pārrēķinās pats — pārbaudi', sakrit: '✓ sakrīt' };
+  const eds = { nosaukums: 'Kā aizpildīt EDS', platumi: [6, 8, 62, 15, 15, 34], rindas: [[T(`Kā aizpildīt ${gads}. gada ienākumu deklarāciju EDS`, 'virsraksts')], []] };
+  if (vs) {
+    eds.rindas.push([T(`Salīdzināts ar ${vs.sagatavotajs === 'VID' ? 'VID sagatavoto' : 'EDS'} deklarāciju Nr. ${vs.id}${vs.iesniegts ? ` (${dat(vs.iesniegts)})` : ''}.`, 'piezime')], []);
+    if (vs.soli.length) eds.rindas.push([T('Soļi', 'galva'), T('', 'galva'), T('', 'galva')], ...vs.soli.map((t, i) => [`${i + 1}.`, '', t]), []);
+    else eds.rindas.push([T('VID versija jau ir pareiza: deklarācijā nekas nav jāmaina.', 'b')], []);
+    eds.rindas.push([T('Lapa', 'galva'), T('Rinda', 'galvaN'), T('Nosaukums', 'galva'), T('VID versija, €', 'galvaN'), T('Pareizi, €', 'galvaN'), T('Kas jādara', 'galva')],
+      ...vs.rindas.map((r) => [r.lapa, r.rinda, r.nosaukums, N(r.vid), N(r.pareizi, undefined, r.darbiba === 'ievadit' ? 'naudaB' : undefined), DARB[r.darbiba]]));
+    if (vs.piezimes.length) eds.rindas.push([], ...vs.piezimes.map((t) => [T('• ' + t, 'piezime')]));
+  } else {
+    eds.rindas.push([T('Soļi', 'galva'), T('', 'galva'), T('', 'galva')],
+      ['1.', '', 'EDS atver šī gada ienākumu deklarāciju, ko sagatavojis VID. Tajā jau ir viss, ko VID zina no citiem avotiem (AKKA/LAA, procenti, attaisnotie izdevumi, pensiju fondi).'],
+      ['2.', '', `Cilnē D3, rindā ${R.ienemumi}, ieraksti ${x3.ienemumi.toFixed(2).replace('.', ',')} €.`],
+      ['3.', '', `Cilnē D3, rindā ${R.izdevumi}, ieraksti ${x3.izdevumi.toFixed(2).replace('.', ',')} €.`],
+      ['4.', '', 'Pārējo EDS aprēķina pats. Lai rīks pārbaudītu gala rezultātu, lejupielādē no EDS deklarācijas XML un ielādē to rīka sadaļā „Gada deklarācija”.'],
+      [], [T('Svarīgi: VID priekšaizpildījumā D3 ieņēmumi bieži ir ņemti no ceturkšņa ziņojumiem bez nosacītajiem izdevumiem. Rindas 5 un 6 pārbaudi katru gadu.', 'bridinajums')]);
+  }
 
   // ---------- Banka ----------
   const darijumi = [...ie.darijumi].sort((a, b) => a.datums.localeCompare(b.datums));
@@ -200,7 +222,7 @@ export function parskatsLapas(ie) {
     [T('Apliekamie ienākumi no saimnieciskās darbības', 'b'), N(x3.apliekamie, "'Deklarācija'!C6", 'naudaB'), `D3 pielikuma ${R.apliekamie}. rinda`], // 8
     ['VSAOI pēc rīka aprēķina', N(vsaoiAprekinata, `'Ceturkšņi'!I${cetKopa}`), 'četru ceturkšņa ziņojumu summa'],                  // 9
     ['VSAOI, kas izmantota deklarācijā', N(d.r6, "'Deklarācija'!C18"), 'ja ievadīta iesniegtā summa, tā'],                         // 10
-    [T('IIN maksājams (aplēse)', 'b'), N(d.r24, "'Deklarācija'!C27", 'naudaB'), `D lapas ${D.maksajams}. rinda`],                    // 11
+    [T(ievaditi || vs ? 'IIN maksājams (aplēse)' : 'IIN maksājams (aplēse NEPILNĪGA: nav EDS datu)', 'b'), N(d.r24, "'Deklarācija'!C27", 'naudaB'), ievaditi || vs ? `D lapas ${D.maksajams}. rinda` : 'IIN aprēķina EDS; sk. lapu „Kā aizpildīt EDS”'],                    // 11
     ['IIN pārmaksa (aplēse)', N(d.r25, "'Deklarācija'!C28"), `D lapas ${D.parmaksa}. rinda`],                                        // 12
     ['Samaksāts VID par šo gadu', N(vidSamaksats, `SUMIFS(${B('E')},${B('F')},"${VID_MAKSAJUMS}",${B('I')},${gads})`), 'Banka: maksājumi VID ar šo nodokļu gadu'], // 13
     [T('Vēl jāsamaksā (VSAOI + IIN − samaksātais)', 'b'), N(r2(Math.max(0, d.r6 + d.r24 - vidSamaksats)), 'MAX(0,ROUND(B10+B11-B13,2))', 'naudaB'), ''], // 14
@@ -216,6 +238,7 @@ export function parskatsLapas(ie) {
     ['Žurnāls', '', 'katrs saimnieciskās darbības ieņēmums'],
     ['Ceturkšņi', '', 'mēnešu un ceturkšņu VSAOI kā pašnodarbinātā ziņojumā'],
     ['Deklarācija', '', 'D3 pielikums un D lapas aplēse'],
+    ['Kā aizpildīt EDS', '', 'kuras rindas EDS jāieraksta un kas jāpārbauda'],
     ['Banka', '', 'visi apstiprinātie darījumi ar kategorijām, arī tie, kas neiet aprēķinā'],
     ['Rēķini un līgumi', '', 'izrakstītie rēķini un autorlīgumi ar apmaksas stāvokli'],
     ['Noteikumi', '', 'gada likmes un normas, ko izmanto formulas']
@@ -223,7 +246,7 @@ export function parskatsLapas(ie) {
 
   const irRl = ie.rekini.length > 0 || ie.ligumi.length > 0;       // bez rēķiniem un līgumiem lapa tikai mulsinātu
   kop.rindas = kop.rindas.filter((r) => irRl || r[0] !== 'Rēķini un līgumi');   // saraksts „Lapas” ir aiz formulu rindām
-  return [kop, zurnals_, cet, dek, banka, ...(irRl ? [rl] : []), noteikumi];
+  return [kop, zurnals_, cet, dek, eds, banka, ...(irRl ? [rl] : []), noteikumi];
 }
 
 export const gadaParskats = (ievade) => xlsxFails(parskatsLapas(ievade));

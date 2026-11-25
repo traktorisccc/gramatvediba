@@ -47,12 +47,12 @@ test('Formulas atsaucas tikai uz esošām lapām', () => {
   }
 });
 
-test('Fails ir derīgs ZIP ar 7 lapām', () => {
+test('Fails ir derīgs ZIP ar 8 lapām', () => {
   const b = gadaParskats(ie);
   assert.equal(String.fromCharCode(b[0], b[1]), 'PK');
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), beigas = b.length - 22;
   assert.equal(dv.getUint32(beigas, true), 0x06054b50);
-  assert.equal(dv.getUint16(beigas + 10, true), 5 + 7);           // 5 pamatfaili + 7 lapas
+  assert.equal(dv.getUint16(beigas + 10, true), 5 + 8);           // 5 pamatfaili + 8 lapas
 });
 
 test('Tukšs gads nesalūzt; bez rēķiniem un līgumiem lapas „Rēķini un līgumi” nav', () => {
@@ -84,4 +84,17 @@ test('Žurnāls: ceturkšņu starpsummas, pozīcija un ienākumi ar jau samaksā
   // ceturkšņu lapa joprojām summē pa mēnešiem tikai SD ieņēmumus
   const c = sunas(lapas.find((l) => l.nosaukums === 'Ceturkšņi'));
   assert.ok(Object.values(c).some((x) => x?.f?.includes("SUMIFS('Žurnāls'!$H$2:$H$")));
+});
+
+test('Lapa „Kā aizpildīt EDS”: bez VID deklarācijas — D3 rindas; ar salīdzinājumu — soļi un tabula', () => {
+  const bez = parskatsLapas(ie).find((l) => l.nosaukums === 'Kā aizpildīt EDS');
+  assert.ok(bez.rindas.some((r) => /Cilnē D3, rindā 5, ieraksti/.test(r?.[2] || '')));
+  const kop = parskatsLapas({ ...ie, g: {} }).find((l) => l.nosaukums === 'Kopsavilkums');
+  assert.ok(kop.rindas.some((r) => /NEPILNĪGA/.test(r?.[0]?.v || '')));
+  const vs = { id: '1001', iesniegts: '2026-05-02', sagatavotajs: 'VID', soli: ['Atver.', 'Cilnē D3, rindā 6 ieraksti 1,00 €.'], piezimes: ['Piezīme.'],
+    rindas: [{ lapa: 'D3', rinda: '6', nosaukums: 'Izdevumi', vid: 0, pareizi: 1, darbiba: 'ievadit' }, { lapa: 'D', rinda: '25', nosaukums: 'Atmaksa', vid: 1, pareizi: 1, darbiba: 'sakrit' }] };
+  const ar = parskatsLapas({ ...ie, vidSalidzinajums: vs }).find((l) => l.nosaukums === 'Kā aizpildīt EDS');
+  assert.ok(ar.rindas.some((r) => r?.[2] === 'Cilnē D3, rindā 6 ieraksti 1,00 €.'));
+  assert.ok(ar.rindas.some((r) => r?.[5]?.v === 'IERAKSTI EDS'));
+  assert.ok(ar.rindas.some((r) => r?.[5] === '✓ sakrīt'));
 });

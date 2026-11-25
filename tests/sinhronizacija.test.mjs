@@ -34,11 +34,12 @@ function viltotsDrive(epasts = 'anna@example.com') {
 
 /** Viena ierīce: pārlūka dati un savienojuma stāvoklis. */
 function ierice(drive, sakuma, atbilde = 'drive') {
-  const st = { dati: sakuma, meta: {}, jautats: [], rezerve: null };
+  const st = { dati: sakuma, meta: {}, jautats: [], rezerve: null, baze: null, zinas: [] };
   const s = izveidotSinhronizatoru({
     drive, meta: () => st.meta, rakstitMeta: (m) => { st.meta = m; }, dati: () => st.dati, aizstatDatus: (d) => { st.dati = d; },
     lokalaRezerve: (d) => { st.rezerve = d; }, uzTekstu: (d) => JSON.stringify(d), noTeksta: (t) => JSON.parse(t),
     jautat: async (j) => { st.jautats.push(j.virsraksts); return atbilde; }, apstiprinat: async () => true,
+    baze: () => st.baze, rakstitBazi: (d) => { st.baze = d; }, zinot: (t) => st.zinas.push(t),
     sodien: () => '2026-11-23', tagad: () => '2026-11-23T12:00:00.000Z'
   });
   const mainit = (fn) => { fn(st.dati); st.meta = { ...st.meta, mainits: true }; };
@@ -68,27 +69,53 @@ test('Divas ierīces: izmaiņas pāriet; konfliktā nekas netiek zaudēts', asyn
   assert.equal(await A.s.sinhronizet(), 'lejupieladet');           // A nebija izmaiņu → paņem B izmaiņas
   assert.equal(A.st.dati.rekini.length, 2);
 
-  // Abās ierīcēs izmaiņas vienlaikus → jautā; izvēlas Drive, pārlūka dati paliek lokālā rezervē
+  // Abās ierīcēs izmaiņas vienlaikus → apvieno bez jautāšanas; pārlūka versija pirms apvienošanas paliek lokālā rezervē
   B.mainit((d) => d.rekini.push({ nr: 3 }));
   await B.s.sinhronizet();
   A.mainit((d) => d.rekini.push({ nr: 99 }));
-  assert.equal(await A.s.sinhronizet(), 'lejupieladet');
-  assert.deepEqual(A.st.jautats, ['Dati mainīti citā ierīcē']);
-  assert.deepEqual(A.st.dati.rekini.map((r) => r.nr), [1, 2, 3]);
+  assert.equal(await A.s.sinhronizet(), 'apvienots');
+  assert.deepEqual(A.st.jautats, []);
+  assert.deepEqual(A.st.dati.rekini.map((r) => r.nr).sort((x, y) => x - y), [1, 2, 3, 99]);
   assert.deepEqual(A.st.rezerve.rekini.map((r) => r.nr), [1, 2, 99]);
+  assert.match(A.st.zinas.at(-1), /Dati apvienoti: 1 no šī pārlūka, 1 no Drive/);
+  assert.equal(await B.s.sinhronizet(), 'lejupieladet');
+  assert.equal(B.st.dati.rekini.length, 4);
 });
 
-test('Konfliktā izvēlas pārlūka datus: Drive vecie dati paliek rezerves kopijā', async () => {
-  const D = viltotsDrive(), A = ierice(D, dati([{ nr: 1 }]));
+test('Pirmā pieslēgšana ar datiem abās vietās: apvieno, neko nedzēš (arī nejaušs „viens rēķins” neizdzēš pārējos)', async () => {
+  const D = viltotsDrive(), A = ierice(D, dati([{ id: 'a', nr: 1 }, { id: 'b', nr: 2 }, { id: 'c', nr: 3 }]));
   await A.s.savienot();
-  const B = ierice(D, dati(), 'parluks'); await B.s.savienot();
-  A.mainit((d) => d.rekini.push({ nr: 2 })); await A.s.sinhronizet();
-  B.mainit((d) => d.rekini.push({ nr: 7 }));
-  assert.equal(await B.s.sinhronizet(), 'augsupieladet');
+  const B = ierice(D, dati([{ id: 'x', nr: 4 }]), 'parluks');     // jauna ierīce ar vienu rēķinu, izrakstītu bez Drive
+  assert.equal(await B.s.savienot(), 'apvienots');
+  assert.deepEqual(B.st.jautats, []);
   const f = await D.atrastFailu('gramatvediba-dati.json', B.st.meta.mapesId);
-  assert.deepEqual(JSON.parse(await D.lejupieladet(f.id)).rekini.map((r) => r.nr), [1, 7]);
-  const rezerves = [...D.faili.values()].filter((x) => !x.mape && x.name.startsWith('gramatvediba-dati 2026-11-23'));
-  assert.ok(rezerves.some((x) => JSON.parse(x.saturs).rekini.some((r) => r.nr === 2)), 'A izmaiņas saglabātas rezerves kopijā');
+  assert.deepEqual(JSON.parse(await D.lejupieladet(f.id)).rekini.map((r) => r.id).sort(), ['a', 'b', 'c', 'x']);
+});
+
+test('Viens ieraksts labots abās vietās: jautā tikai par to; izvēle tiek ievērota, otra versija rezervē', async () => {
+  for (const [atbilde, gaid] of [['parluks', 200], ['drive', 300]]) {
+    const D = viltotsDrive(), A = ierice(D, dati([{ id: 'a', nr: 1, summa: 100 }]));
+    await A.s.savienot();
+    const B = ierice(D, dati(), atbilde); await B.s.savienot();
+    A.mainit((d) => { d.rekini[0].summa = 300; d.rekini.push({ id: 'n', nr: 2 }); }); await A.s.sinhronizet();
+    B.mainit((d) => { d.rekini[0].summa = 200; });
+    assert.equal(await B.s.sinhronizet(), 'apvienots');
+    assert.deepEqual(B.st.jautats, ['Daži ieraksti laboti abās vietās']);
+    assert.equal(B.st.dati.rekini.find((r) => r.id === 'a').summa, gaid);
+    assert.ok(B.st.dati.rekini.some((r) => r.id === 'n'), 'otras ierīces jaunais rēķins nav pazaudēts');
+    const rezerves = [...D.faili.values()].filter((x) => !x.mape && x.name.startsWith('gramatvediba-dati 2026-11-23'));
+    assert.ok(rezerves.some((x) => JSON.parse(x.saturs).rekini.some((r) => r.summa === 300)), 'Drive versija rezervē');
+  }
+});
+
+test('Dzēšana pāriet uz otru ierīci tikai tad, ja otra to nav mainījusi', async () => {
+  const D = viltotsDrive(), A = ierice(D, dati([{ id: 'a', nr: 1 }, { id: 'b', nr: 2 }]));
+  await A.s.savienot();
+  const B = ierice(D, dati()); await B.s.savienot();
+  A.mainit((d) => { d.rekini = d.rekini.filter((r) => r.id !== 'a'); }); await A.s.sinhronizet();
+  B.mainit((d) => { d.rekini.push({ id: 'c', nr: 3 }); });
+  assert.equal(await B.s.sinhronizet(), 'apvienots');
+  assert.deepEqual(B.st.dati.rekini.map((r) => r.id).sort(), ['b', 'c']);
 });
 
 test('Cits Google konts tiek atteikts', async () => {

@@ -1,5 +1,7 @@
 // Datu sinhronizācija starp pārlūku un Google Drive.
-// Princips: nekad klusi nepārrakstīt datus, kas mainīti citā ierīcē. Pirms pārrakstīšanas Drive tiek izveidota rezerves kopija.
+// Princips: nekad klusi nepārrakstīt datus, kas mainīti citā ierīcē. Ja dati mainīti abās vietās, tos apvieno pa ierakstiem
+// (apvienot.js); jautā tikai par ierakstiem, kas laboti abās vietās. Pirms pārrakstīšanas Drive tiek izveidota rezerves kopija.
+import { apvienot, atrisinat } from './apvienot.js';
 
 /** Ko darīt, salīdzinot pārlūka un Drive stāvokli. Tīra funkcija. */
 export function izlemt({ zinamaVersija, attalais, lokalsMainits, lokaliIrDati }) {
@@ -20,6 +22,8 @@ export const datuApraksts = (d) => `${d.rekini?.length || 0} rēķini, ${d.autor
  *   uzTekstu(d), noTeksta(t),      — JSON pārveidošana (eksportet / importet)
  *   jautat({ virsraksts, teksts, pogas: [{ id, teksts }] }) → Promise<id>,
  *   apstiprinat(teksts) → Promise<boolean>,
+ *   baze(), rakstitBazi(d),        — pēdējā kopīgā versija trīspusējai apvienošanai
+ *   zinot(teksts),                 — īss paziņojums lietotājam
  *   sodien(), tagad()
  * }
  */
@@ -35,22 +39,26 @@ export function izveidotSinhronizatoru(deps) {
     deps.rakstitMeta({ ...deps.meta(), rezerve: diena });
   }
 
+  const bazei = (d) => deps.rakstitBazi?.(JSON.parse(JSON.stringify(d)));
+
   async function augsupieladet(m) {
-    const teksts = deps.uzTekstu(deps.dati());
+    const dati = deps.dati(), teksts = deps.uzTekstu(dati);
     if (!m.failaId) {
       const j = await drive.izveidotFailu(drive.DATU_FAILS, m.mapesId, teksts);
       deps.rakstitMeta({ ...deps.meta(), failaId: j.id, versija: String(j.version), mainits: false, sinhronizets: deps.tagad() });
-      return;
+      bazei(dati); return;
     }
     await rezerve(m.failaId, m.mapesId);
     const j = await drive.atjaunotFailu(m.failaId, teksts);
     deps.rakstitMeta({ ...deps.meta(), versija: String(j.version), mainits: false, sinhronizets: deps.tagad() });
+    bazei(dati);
   }
 
   async function lejupieladet(m, attalais, tekstsJau) {
     const d = deps.noTeksta(tekstsJau ?? await drive.lejupieladet(attalais.id));
     deps.aizstatDatus(d);
     deps.rakstitMeta({ ...deps.meta(), failaId: attalais.id, versija: String(attalais.version), mainits: false, sinhronizets: deps.tagad() });
+    bazei(d);
   }
 
   /** Viens sinhronizācijas solis. attalais: undefined = noskaidrot pašam. */
@@ -70,24 +78,31 @@ export function izveidotSinhronizatoru(deps) {
     if (darbiba === 'izveidot' || darbiba === 'augsupieladet') { await augsupieladet(deps.meta()); return darbiba; }
     if (darbiba === 'lejupieladet') { await lejupieladet(m, attalais); return darbiba; }
 
-    // izvele: Drive un pārlūkā ir atšķirīgi dati
+    // Dati mainīti abās vietās (vai pirmā pieslēgšanās, kad abās ir dati): apvieno pa ierakstiem.
     const teksts = await drive.lejupieladet(attalais.id), attalie = deps.noTeksta(teksts);
-    const pirma = m.versija === null || m.versija === undefined;
-    const izv = await deps.jautat({
-      virsraksts: pirma ? 'Google Drive jau ir grāmatvedības dati' : 'Dati mainīti citā ierīcē',
-      teksts: pirma
-        ? `Google Drive: ${datuApraksts(attalie)}.\nŠajā pārlūkā: ${datuApraksts(lokalie)}.\n\nKurus datus paturēt? Otri netiks izdzēsti: tie paliks rezerves kopijā.`
-        : `Kopš pēdējās sinhronizācijas dati Google Drive mainīti citā ierīcē, un arī šeit ir nesaglabātas izmaiņas.\nGoogle Drive: ${datuApraksts(attalie)}.\nŠajā pārlūkā: ${datuApraksts(lokalie)}.\n\nKurus datus paturēt? Otri paliks rezerves kopijā.`,
-      pogas: [{ id: 'drive', teksts: 'Paturēt Google Drive datus' }, { id: 'parluks', teksts: 'Paturēt šī pārlūka datus' }, { id: 'atcelt', teksts: 'Atcelt' }]
-    });
-    if (izv === 'drive') { deps.lokalaRezerve?.(lokalie); await lejupieladet(m, attalais, teksts); return 'lejupieladet'; }
-    if (izv === 'parluks') {
-      await rezerve(attalais.id, m.mapesId, true);
-      deps.rakstitMeta({ ...deps.meta(), failaId: attalais.id, versija: String(attalais.version), mainits: true });
-      await augsupieladet(deps.meta());
-      return 'augsupieladet';
+    const r = apvienot(deps.baze?.() || null, lokalie, attalie);
+    let izv = 'drive';
+    if (r.konflikti.length) {
+      const saraksts = r.konflikti.slice(0, 8).map((k) => `• ${k.nosaukums}${k.l === null ? ' (pārlūkā dzēsts)' : k.a === null ? ' (Drive dzēsts)' : ''}`).join('\n');
+      izv = await deps.jautat({
+        virsraksts: 'Daži ieraksti laboti abās vietās',
+        teksts: `Pārējās izmaiņas no abām vietām ir apvienotas automātiski. Šie ieraksti ir laboti gan šajā pārlūkā, gan citā ierīcē:\n${saraksts}${r.konflikti.length > 8 ? `\n… un vēl ${r.konflikti.length - 8}` : ''}\n\nKuru versiju paturēt šiem ierakstiem? Otra paliks rezerves kopijā.`,
+        pogas: [{ id: 'drive', teksts: 'Google Drive versiju' }, { id: 'parluks', teksts: 'Šī pārlūka versiju' }, { id: 'atcelt', teksts: 'Atcelt' }]
+      });
+      if (izv !== 'drive' && izv !== 'parluks') return 'atcelts';
     }
-    return 'atcelts';
+    const jaunie = atrisinat(r, izv);
+    deps.lokalaRezerve?.(lokalie);                                  // pārlūka versija pirms apvienošanas
+    await rezerve(attalais.id, m.mapesId, true);                    // Drive versija pirms apvienošanas
+    deps.aizstatDatus(jaunie);
+    deps.rakstitMeta({ ...deps.meta(), failaId: attalais.id, versija: String(attalais.version), mainits: true });
+    await augsupieladet(deps.meta());
+    const k = r.kopsavilkums, dal = [];
+    if (k.noParluka) dal.push(`${k.noParluka} no šī pārlūka`);
+    if (k.noDrive) dal.push(`${k.noDrive} no Drive`);
+    if (k.dzesti) dal.push(`${k.dzesti} dzēsti`);
+    deps.zinot?.(`Dati apvienoti${dal.length ? ': ' + dal.join(', ') : ''}.${k.dubultiNumuri.length ? ` Uzmanību: vairākiem rēķiniem ir vienāds numurs (${k.dubultiNumuri.join(', ')}). Pārbaudi tos sadaļā „Rēķini”.` : ''}`);
+    return 'apvienots';
   }
 
   /** Sinhronizē; ja jau notiek, atkārto pēc tam (lai pēdējās izmaiņas netiek pazaudētas). */
@@ -121,5 +136,22 @@ export function izveidotSinhronizatoru(deps) {
     return sinhronizet();
   }
 
-  return { savienot, sinhronizet, aiznemts: () => !!notiek };
+  /** Drive rezerves kopiju saraksts. */
+  async function kopijas() {
+    const m = deps.meta(); if (!m.mapesId) return [];
+    const rm = await drive.mape(drive.REZERVJU_MAPE, m.mapesId, false);
+    return rm ? drive.failiMape(rm) : [];
+  }
+  /** Atjauno no Drive rezerves kopijas: pašreizējie dati vispirms nonāk rezervē (Drive un pārlūkā). */
+  async function atjaunot(id) {
+    const d = deps.noTeksta(await drive.lejupieladet(id)), m = deps.meta();
+    if (m.failaId) await rezerve(m.failaId, m.mapesId, true);
+    deps.lokalaRezerve?.(deps.dati());
+    deps.aizstatDatus(d);
+    deps.rakstitMeta({ ...deps.meta(), mainits: true });
+    await augsupieladet(deps.meta());
+    return d;
+  }
+
+  return { savienot, sinhronizet, kopijas, atjaunot, aiznemts: () => !!notiek };
 }

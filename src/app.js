@@ -8,10 +8,12 @@ import { sadalitRekvizitus } from './rekviziti.js';
 import { gadaParskats, VID_MAKSAJUMS } from './parskats.js';
 import { ieladet, saglabat, eksportet, importet, TUKSI_DATI } from './glabatuve.js';
 import * as drive from './drive.js';
-import { izveidotSinhronizatoru } from './sinhronizacija.js';
+import { izveidotSinhronizatoru, datuApraksts } from './sinhronizacija.js';
 import { filtretRekinus, filtrsAktivs } from './meklesana.js';
 import * as gmail from './gmail.js';
 import { zurnals, IETURETIE } from './zurnals.js';
+import { lasitVidDeklaraciju, gadaLauki, salidzinat } from './vidDeklaracija.js';
+import { VERSIJA } from './versija.js';
 import { parbauditBlanku, aizpilditBlanku, blankasFailaVards, bankasNosaukums } from './hanzas.js';
 import { rekinsPdf, pdfFailaVards } from './pdf.js';
 
@@ -77,12 +79,16 @@ const DRIVE_ATSLEGA = 'gramatvediba:drive';
 function driveMeta() { try { return JSON.parse(localStorage.getItem(DRIVE_ATSLEGA) || '{}') || {}; } catch { return {}; } }
 function rakstitDriveMeta(m) { try { localStorage.setItem(DRIVE_ATSLEGA, JSON.stringify(m)); } catch { /* nav vietas */ } raditDriveStatusu(); }
 let driveKluda = '', sinhTaimeris = null;
+const BAZE = 'gramatvediba:sinh-baze';      // pēdējā ar Drive kopīgā versija (trīspusējai apvienošanai)
 const sinh = izveidotSinhronizatoru({
   drive, meta: driveMeta, rakstitMeta: rakstitDriveMeta, dati: () => dati,
   aizstatDatus: (d) => { saglabat(d); dati = ieladet(); kess = {}; radit(); },
   lokalaRezerve: (d) => { try { localStorage.setItem('gramatvediba:dati-pirms-drive', JSON.stringify(d)); } catch { /* nav vietas */ } },
   piesaistitKontu: (e) => { if (dati.drive?.konts !== e) { dati.drive = { konts: e }; saglabat(dati); } },
   uzTekstu: eksportet, noTeksta: importet, jautat: dialogs, apstiprinat: (teksts) => dialogs({ virsraksts: 'Google Drive', teksts, pogas: [{ id: 'ja', teksts: 'Jā' }, { id: 'ne', teksts: 'Nē' }] }).then((x) => x === 'ja'),
+  baze: () => { try { return JSON.parse(localStorage.getItem(BAZE) || 'null'); } catch { return null; } },
+  rakstitBazi: (d) => { try { localStorage.setItem(BAZE, JSON.stringify(d)); } catch { /* nav vietas: apvienošana būs divpusēja */ } },
+  zinot: (t) => toast(t, 6000),
   sodien: () => sodien(), tagad: () => new Date().toISOString()
 });
 function planotSinhronizaciju() {
@@ -197,9 +203,10 @@ function raditDriveStatusu(notiek = sinh?.aiznemts?.()) {
   if (notiek) t = 'Google Drive: sinhronizē…';
   else if (driveKluda) t = `<span style="color:var(--warn)">${h(driveKluda)}</span> ${poga(m.konts ? 'Pieslēgties vēlreiz' : 'Mēģināt vēlreiz')}`;
   else if (!m.konts) t = `Dati glabājas tikai šajā pārlūkā. ${poga('Pieslēgt Google Drive')}`;
-  else if (!drive.irAtslega()) t = `Google Drive: ${h(m.konts)} · ${m.mainits ? '<b>ir izmaiņas, kas vēl nav Drive</b>' : `pēdējā sinhronizācija ${laiksLv(m.sinhronizets)}`} ${poga('Pieslēgties')}`;
+  else if (!drive.irAtslega()) t = `<b>Strādā bez Google Drive.</b> ${m.mainits ? 'Izmaiņas glabājas šajā pārlūkā un tiks apvienotas ar Drive, kad pieslēgsies.' : `Dati var nebūt jaunākie (pēdējā sinhronizācija ${laiksLv(m.sinhronizets)}).`} ${poga('Pieslēgties')}`;
   else t = `Google Drive: ${h(m.konts)} · ${m.mainits ? 'gaida saglabāšanu…' : `sinhronizēts ${laiksLv(m.sinhronizets)} ✓`}`;
   el.innerHTML = t;
+  el.classList.toggle('bezdrive', !!m.konts && !drive.irAtslega() && !notiek && !driveKluda);
   const b = $('[data-drive-pieslegt]', el); if (b) b.onclick = pieslegtDrive;
 }
 /** Modāls jautājums ar pogām. Atgriež izvēlētās pogas id. */
@@ -218,7 +225,7 @@ function dialogs({ virsraksts, teksts, pogas }) {
 window.addEventListener('beforeunload', (e) => { const m = driveMeta(); if (m.konts && m.mainits) { e.preventDefault(); e.returnValue = ''; } });
 let kess = {};                                                     // aprēķinu kešs vienam zīmējumam
 
-function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200); }
+function toast(t, ms = 2200) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), ms); }
 /** Lietotāja izmaiņa: saglabā pārlūkā un, ja pieslēgts Google Drive, sinhronizē. */
 function saglabatDati() {
   const ok = saglabat(dati);
@@ -307,6 +314,12 @@ function nodokluAtlikums(gads) {
 }
 
 /** Excel pārskats grāmatvedim par gadu: žurnāls, ceturkšņi, deklarācija, banka, rēķini un noteikumi ar formulām. */
+/** Salīdzinājums ar ielādēto VID deklarāciju (ja ir). */
+function vidSalidzinajums(gads) {
+  const v = dati.gadi[gads]?.vidDekl; if (!v) return null;
+  const { n } = gadaNoteikumi(gads), a = gadaAprekins(gads);
+  return { ...salidzinat(v, a.d3, n, a.vsaoiAprekinata), id: v.id, iesniegts: v.iesniegts, sagatavotajs: v.sagatavotajs };
+}
 function lejupieladetParskatu(gads) {
   const { n, provizoriski } = gadaNoteikumi(gads), g = dati.gadi[gads] || {};
   const piesaiste = (d) => { const r = rekinsPecSaites(d.saite), l = ligumsPecSaites(d.saite);
@@ -327,7 +340,7 @@ function lejupieladetParskatu(gads) {
   const ligumi = dati.autorligumi.filter((a) => gadsNo(a.datums || '0000') === gads || dati.darijumi.some((d) => ligumsPecSaites(d.saite) === a && gadsNo(d.datums) === gads))
     .map((a) => ({ nr: a.nr, datums: a.datums, pasutitajs: pasutitajs(a.pasutitajsId).nosaukums, veids: a.veids, summa: a.summa, samaksats: samaksatsLigumam(a), ietur: a.izmaksatajsIetur }));
   const ieraksti = sdIeraksti().filter((e) => gadsNo(e.datums) === gads).map((e) => ({ datums: e.datums, partneris: e.partneris, info: e.info, veids: e.veids, summa: e.summa, pozicija: e.pozicija }));
-  const fails = gadaParskats({ gads, n, provizoriski, vards: dati.profils.vards, izveidots: sodien(), ieraksti, citiIeraksti: citiIeraksti().filter((e) => gadsNo(e.datums) === gads), darijumi, nesaistiti, rekini, ligumi,
+  const fails = gadaParskats({ gads, n, provizoriski, vidSalidzinajums: vidSalidzinajums(gads), vards: dati.profils.vards, izveidots: sodien(), ieraksti, citiIeraksti: citiIeraksti().filter((e) => gadsNo(e.datums) === gads), darijumi, nesaistiti, rekini, ligumi,
     g: { d1Apliekamie: sk(g.d1Apliekamie), d1Ieturetais: sk(g.d1Ieturetais), citiNodokli: sk(g.citiNodokli), dzivibasIemaksas: sk(g.dzivibasIemaksas), attaisnotie: sk(g.attaisnotie),
       vsaoiDeklareta: g.vsaoiDeklareta === undefined || g.vsaoiDeklareta === '' ? '' : sk(g.vsaoiDeklareta) } });
   lejupieladet(`gramatvediba-parskats-${gads}.xlsx`, fails, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -888,14 +901,15 @@ function skatsDeklaracija(v) {
   const rinda = (nr, nos, x, b) => `<tr><td>${h(nos)}</td><td class="n">${nr}</td><td class="n c" data-k="${eds(x)}">${b ? '<b>' : ''}${eds(x)}${b ? '</b>' : ''}</td></tr>`;
   v.innerHTML = `<h2>Gada ienākumu deklarācija</h2>
   <div class="row" style="margin-bottom:14px;align-items:flex-end">${gaduIzvele('g', deklGads)}<button id="parskats">Pārskats grāmatvedim (Excel)</button></div>${provBaneris(deklGads)}
-  <p class="note">Pārskatā ir žurnāls, ceturkšņu VSAOI, D3 un D lapa, visi bankas darījumi ar kategorijām, rēķini un līgumi. Aprēķini ir Excel formulas, tāpēc grāmatvedis var pārbaudīt katru skaitli.</p>
+  <p class="note">Pārskatā ir žurnāls, ceturkšņu VSAOI, D3 un D lapa, visi bankas darījumi ar kategorijām, rēķini un līgumi, kā arī lapa „Kā aizpildīt EDS”. Aprēķini ir Excel formulas, tāpēc grāmatvedis var pārbaudīt katru skaitli.</p>
+  ${vidPanelis(deklGads)}
   <h3>D3 · Ienākumi no saimnieciskās darbības</h3><p class="note">Šos skaitļus ievadi EDS. Uzklikšķini, lai nokopētu. Ja VID priekšaizpildījumā ir citi skaitļi, pareizie ir tie, kas balstīti uz tavu uzskaiti.</p>
   <div class="tbl eds"><table><thead><tr><th></th><th class="n">Rinda</th><th class="n">Nodokļa maksātāja deklarētie dati</th></tr></thead><tbody>
     ${rinda(R.ienemumi, 'Ieņēmumi no citiem saimnieciskās darbības veidiem', a.d3.ienemumi)}
     ${rinda(R.izdevumi, 'Izdevumi, kas saistīti ar citiem saimnieciskās darbības veidiem', a.d3.izdevumi)}
     ${rinda(R.apliekamie, 'Apliekamie ienākumi no saimnieciskās darbības', a.d3.apliekamie, true)}
   </tbody></table></div>
-  <h3>Dati, ko EDS pievieno pats</h3><p class="note">Ievadi tos no EDS, lai aplēse sakristu ar deklarāciju. Ja neaizpildīsi, aplēse būs nedaudz lielāka par īsto IIN.</p>
+  <h3>Dati, ko EDS pievieno pats</h3><p class="note">${g.vidDekl ? `Aizpildīts no VID deklarācijas Nr. ${h(g.vidDekl.id)}. Ja vajag, vari labot.` : 'Ielādē VID deklarācijas XML (augstāk) vai ievadi tos no EDS. Ja neaizpildīsi, IIN aplēse nebūs pilnīga: galīgo IIN aprēķina EDS.'}</p>
   <div class="panel grid">${ievade('d1Apliekamie', 'D1 apliekamie (AKKA u. c.)')}${ievade('d1Ieturetais', 'D1 ieturētais nodoklis')}${ievade('citiNodokli', 'D1¹ starpība (19. rinda)')}
     ${ievade('dzivibasIemaksas', 'Dzīvības apdrošināšanas iemaksas')}${ievade('attaisnotie', 'Attaisnotie izdevumi (D4)')}${ievade('vsaoiDeklareta', 'VSAOI pēc iesniegtajiem ziņojumiem')}</div>
   <p class="note">VSAOI pēc rīka aprēķina šim gadam: ${naudaLv(a.vsaoiAprekinata)} €. Ja iesniegtajos ziņojumos kopsumma bija cita, ieraksti to pēdējā laukā, jo EDS izmanto iesniegto.</p>
@@ -910,8 +924,36 @@ function skatsDeklaracija(v) {
   <p class="note">Deklarāciju iesniedz no ${datumsLv(`${deklGads + 1}-03-01`)} līdz ${datumsLv(`${deklGads + 1}-06-01`)} IIN samaksā līdz ${datumsLv(`${deklGads + 1}-06-23`)}${a.d.r24 > n.iinVienaMaksajumaRobeza ? ' Summu var maksāt trīs daļās.' : ''}</p>`;
   $('#g').onchange = (e) => { deklGads = Number(e.target.value); radit(); };
   $('#parskats').onclick = () => lejupieladetParskatu(deklGads);
+  $('#vidXml').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      const v = lasitVidDeklaraciju(await f.text());
+      const { attaisnotie, ...pareji } = gadaLauki(v);
+      dati.gadi[v.gads] = { ...(dati.gadi[v.gads] || {}), ...pareji, attaisnotie, vidDekl: v };
+      if (v.gads !== deklGads) { deklGads = v.gads; }
+      saglabatUnRadit(`Ielādēta ${v.gads}. gada deklarācija Nr. ${v.id}`);
+    } catch (err) { toast(err.message || 'Neizdevās nolasīt failu'); }
+  };
+  if ($('#vidNonemt')) $('#vidNonemt').onclick = () => { if (!confirm('Noņemt ielādēto VID deklarāciju? Ievadītie EDS dati paliks.')) return; delete dati.gadi[deklGads].vidDekl; saglabatUnRadit('Noņemts'); };
   $$('[data-g]').forEach((el) => el.onchange = () => { dati.gadi[deklGads] = { ...(dati.gadi[deklGads] || {}), [el.dataset.g]: el.value.trim() }; saglabatUnRadit(); });
   $$('[data-k]').forEach((td) => td.onclick = () => kopet(td.dataset.k));
+}
+
+/** Panelis: VID sagatavotās deklarācijas ielāde un salīdzinājums ar rīka aprēķinu. */
+function vidPanelis(gads) {
+  const v = dati.gadi[gads]?.vidDekl, ievade = `<label class="check" style="cursor:pointer;display:inline-flex"><span class="tag" style="padding:6px 12px">${v ? 'Ielādēt citu XML…' : 'Ielādēt VID deklarācijas XML…'}</span><input type="file" id="vidXml" accept=".xml,text/xml" hidden></label>`;
+  if (!v) return `<h3>Salīdzināt ar VID sagatavoto deklarāciju</h3><div class="panel"><p style="margin-top:0">EDS atver VID sagatavoto ${gads}. gada deklarāciju un lejupielādē to <b>XML</b> formātā. Ielādē to šeit: rīks paņems datus, ko zina VID (AKKA/LAA, procenti, attaisnotie izdevumi, pensiju fondi), aprēķinās pareizo rezultātu un pateiks, kuras rindas EDS jāmaina.</p>
+    <p class="note">No faila tiek nolasīti tikai skaitļi. Personas kods, konta numurs un adrese netiek saglabāti.</p>${ievade}</div>`;
+  const s = vidSalidzinajums(gads), DARB = { ievadit: '<span class="tag warn">ieraksti EDS</span>', parbaudit: '<span class="tag">EDS pārrēķinās — pārbaudi</span>', sakrit: '<span class="tag ok">✓</span>' };
+  const rez = (d) => d.r25 > 0 ? `atmaksa ${naudaLv(d.r25)} €` : `jāmaksā ${naudaLv(d.r24)} €`;
+  return `<h3>Salīdzinājums ar VID sagatavoto deklarāciju</h3><div class="panel">
+    <p style="margin-top:0">Deklarācija Nr. ${h(v.id)}${v.iesniegts ? ` (${datumsLv(v.iesniegts)})` : ''}, sagatavoja ${h(v.sagatavotajs)}. VID versijā: <b>${rez({ r24: v.D['24'], r25: v.D['25'] })}</b>; pareizi: <b class="hl">${rez(s.pareizi)}</b>${s.starpiba ? ` (${s.starpiba > 0 ? 'par ' + naudaLv(s.starpiba) + ' € labāk tev' : 'par ' + naudaLv(-s.starpiba) + ' € vairāk jāmaksā'})` : ''}.</p>
+    ${s.soli.length ? `<h3 style="margin-top:6px">Kā aizpildīt EDS</h3><ol>${s.soli.map((t) => `<li>${h(t)}</li>`).join('')}</ol>` : '<p><b>VID versija jau ir pareiza: deklarācijā nekas nav jāmaina.</b></p>'}
+    <div class="tbl eds"><table><thead><tr><th>Lapa</th><th class="n">Rinda</th><th></th><th class="n">VID versija</th><th class="n">Pareizi</th><th></th></tr></thead><tbody>
+    ${s.rindas.map((r) => `<tr><td>${r.lapa}</td><td class="n">${r.rinda}</td><td>${h(r.nosaukums)}</td><td class="n">${eds(r.vid)}</td><td class="n c" data-k="${eds(r.pareizi)}">${r.darbiba === 'ievadit' ? `<b>${eds(r.pareizi)}</b>` : eds(r.pareizi)}</td><td>${DARB[r.darbiba]}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${s.piezimes.map((p) => `<p class="note">${h(p)}</p>`).join('')}
+    <p class="row" style="margin-bottom:0">${ievade}<button class="link" id="vidNonemt">Noņemt</button></p></div>`;
 }
 
 // ---------- Iestatījumi ----------
@@ -968,9 +1010,10 @@ function skatsIestatijumi(v) {
     <div class="row"><label class="check" style="cursor:pointer"><span style="border:1px solid var(--line);border-radius:6px;padding:8px 14px;font-weight:600;background:var(--surface)">${dati.hanzasBlanka?.fails ? 'Nomainīt paraugu' : 'Izvēlēties .xlsx failu'}</span><input type="file" id="hanzasBlanka" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div>
     <p class="note">Pasūtītājam jābūt atzīmētam ar veidni „Hanzas Perons” tabulā augstāk.</p></div>
   <h3>Google Drive</h3><div class="panel">${driveMeta().konts ? `<p style="margin-top:0">Pieslēgts kontam <b>${h(driveMeta().konts)}</b>. Dati glabājas Google Drive mapē „${drive.SAKNES_MAPE}” un šajā pārlūkā. Pirms datu pārrakstīšanas Drive katru dienu tiek saglabāta rezerves kopija mapē „${drive.REZERVJU_MAPE}”.</p>
-    <div class="row"><button id="drSinh">Sinhronizēt tagad</button></div>`
+    <div class="row"><button id="drSinh">Sinhronizēt tagad</button><button id="drKopijas">Atjaunot no Drive rezerves kopijas…</button></div><div id="drKopSar"></div>`
     : `<p style="margin-top:0">Pieslēdz Google Drive, lai dati būtu drošībā un pieejami arī citās ierīcēs. Rīks redzēs tikai paša izveidotos failus.</p><div class="row"><button id="drSinh" class="primary">Pieslēgt Google Drive</button></div>`}
     <p class="note">Piekļuvi jebkurā brīdī vari atsaukt Google konta iestatījumos: myaccount.google.com/permissions. <a href="privatums.html">Privātuma politika</a></p></div>
+  <p class="note" style="margin-top:18px">Rīka versija ${VERSIJA}. Rīku var instalēt kā aplikāciju: iPhone Safari „Kopīgot → Pievienot sākuma ekrānam”, Mac Safari „Fails → Pievienot Dock”, Chrome — instalēšanas ikona adreses joslā.</p>
   <h3>Dati</h3><div class="panel"><p class="note" style="margin-top:0">Rezerves kopija satur visus tavus datus. Glabā to drošā vietā.</p>
     <div class="row"><button id="eksp">Lejupielādēt rezerves kopiju</button><label class="check" style="cursor:pointer"><span>Atjaunot no faila</span><input type="file" id="imp" accept=".json" hidden></label>
     <button id="dzestVisu" class="link">${driveMeta().konts ? 'Dzēst datus no šī pārlūka (Drive paliek)' : 'Dzēst visus datus šajā pārlūkā'}</button></div></div>`;
@@ -1013,7 +1056,7 @@ function skatsIestatijumi(v) {
     if (!confirm(m.konts ? 'Dzēst datus no šī pārlūka un atvienot Google Drive? Dati Google Drive netiks dzēsti: pieslēdzoties vēlreiz, tie ielādēsies atpakaļ.' : 'Dzēst visus datus šajā pārlūkā? Rezerves kopija netiks dzēsta.')) return;
     if (m.mainits && m.konts && !confirm('Uzmanību: daļa izmaiņu vēl nav saglabāta Google Drive un tiks zaudēta. Turpināt?')) return;
     rakstitDriveMeta({}); drive.aizmirstAtslegu(); gmail.aizmirstGmail(); driveKluda = '';            // vispirms atvieno, lai tukšie dati netiktu augšupielādēti
-    try { localStorage.removeItem('gramatvediba:dati-pirms-drive'); } catch { /* nav svarīgi */ }
+    try { localStorage.removeItem('gramatvediba:dati-pirms-drive'); localStorage.removeItem(BAZE); } catch { /* nav svarīgi */ }
     dati = TUKSI_DATI(); bankasSesija = null; saglabatSesiju(); saglabatUnRadit('Dati dzēsti no šī pārlūka');
   };
   $('#hanzasBlanka').onchange = async (e) => {
@@ -1025,13 +1068,48 @@ function skatsIestatijumi(v) {
       saglabatUnRadit('Rēķina paraugs ielādēts');
     } catch (err) { toast(err.message); }
   };
+  if ($('#drKopijas')) $('#drKopijas').onclick = async () => {
+    const vieta = $('#drKopSar');
+    if (!drive.irAtslega()) { await pieslegtDrive(); if (!drive.irAtslega()) return; }
+    vieta.innerHTML = '<p class="note">Ielādē sarakstu…</p>';
+    try {
+      const k = await sinh.kopijas();
+      vieta.innerHTML = k.length ? `<p class="note">Izvēlies kopiju. Pašreizējie dati vispirms tiks saglabāti kā jauna rezerves kopija, tāpēc atjaunošanu var atsaukt.</p>
+        <div class="tbl"><table><tbody>${k.map((f) => `<tr><td>${h(f.name)}</td><td class="note">${laiksLv(f.modifiedTime)}</td><td><button class="link" data-kop="${h(f.id)}" style="color:var(--ink);font-weight:600">Apskatīt un atjaunot</button></td></tr>`).join('')}</tbody></table></div>`
+        : '<p class="note">Drive vēl nav rezerves kopiju.</p>';
+      $$('[data-kop]', vieta).forEach((b) => b.onclick = async () => {
+        try {
+          const d = importet(await drive.lejupieladet(b.dataset.kop));
+          if (!confirm(`Kopijā: ${datuApraksts(d)}.\nPašlaik: ${datuApraksts(dati)}.\n\nAizstāt pašreizējos datus ar šo kopiju? Pašreizējie dati vispirms tiks saglabāti rezervē.`)) return;
+          await izpilditSinh(() => sinh.atjaunot(b.dataset.kop)); toast('Dati atjaunoti no rezerves kopijas'); radit();
+        } catch (e) { toast(e.message || 'Neizdevās atjaunot'); }
+      });
+    } catch (e) { vieta.innerHTML = `<p class="note">${h(e.message || 'Neizdevās ielādēt sarakstu')}</p>`; }
+  };
   if ($('#drSinh')) $('#drSinh').onclick = () => drive.irAtslega() ? izpilditSinh(() => sinh.sinhronizet()).then(radit) : pieslegtDrive().then(radit);
 }
 
 // ---------- Maršruti un sākums ----------
 const SKATI = { parskats: skatsParskats, rekini: skatsRekini, ligumi: skatsLigumi, banka: skatsBanka, zurnals: skatsZurnals, ceturksnis: skatsCeturksnis, deklaracija: skatsDeklaracija, iestatijumi: skatsIestatijumi };
+/** Sākuma ekrāns: ja grāmatvedība piesaistīta Drive, vispirms pieslēdzas, lai strādātu ar jaunākajiem datiem. */
+const BEZ_DRIVE = 'gramatvediba:bez-drive';
+const jaradaSakums = () => !!driveMeta().konts && !drive.irAtslega() && !sessionStorage.getItem(BEZ_DRIVE);
+function sakumaEkrans(v) {
+  const m = driveMeta();
+  document.body.classList.add('sakums');
+  v.innerHTML = `<div class="panel sakums-p"><h2 style="margin-top:0">Sveiks!</h2>
+    <p>Pieslēdzies Google Drive, lai strādātu ar jaunākajiem datiem no visām ierīcēm.</p>
+    ${driveKluda ? `<p style="color:var(--warn)">${h(driveKluda)}</p>` : ''}
+    <p><button class="primary" id="sPieslegt" style="font-size:1.05rem;padding:12px 22px">Pieslēgties Google Drive</button></p>
+    <p class="note" style="margin:0 0 14px">${h(m.konts)}${m.mainits ? ' · šajā pārlūkā ir izmaiņas, kas vēl nav Drive: pieslēdzoties tās tiks apvienotas' : ''}</p>
+    <button class="link" id="sBez">Strādāt bez Drive</button></div>`;
+  $('#sPieslegt').onclick = async () => { await pieslegtDrive(); if (drive.irAtslega()) { document.body.classList.remove('sakums'); radit(); } else radit(); };
+  $('#sBez').onclick = () => { sessionStorage.setItem(BEZ_DRIVE, '1'); document.body.classList.remove('sakums'); radit(); raditDriveStatusu(); };
+}
 function radit() {
   if (!Object.keys(noteikumi).length) return;                        // noteikumi vēl ielādējas; sakt() zīmēs pēc tam
+  if (jaradaSakums()) { sakumaEkrans($('#view')); return; }
+  document.body.classList.remove('sakums');
   kess = {};
   const r = SKATI[location.hash.slice(1)] ? location.hash.slice(1) : 'parskats';
   $$('#nav a').forEach((a) => a.getAttribute('href') === '#' + r ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
@@ -1039,6 +1117,20 @@ function radit() {
   piesaistitDatumus($('#view'));
 }
 window.addEventListener('hashchange', radit);
+
+// ---------- PWA: servisa skripts un versijas atjaunošana ----------
+// Jauna versija tiek ielādēta fonā; ieslēdzas tikai pēc „Atjaunot”, tāpēc vecie un jaunie faili nekad nesajaucas.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost') && !new URLSearchParams(location.search).has('bez-sw')) {
+  let parlade = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!parlade) { parlade = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    const radit = (w) => { if (!w || !navigator.serviceWorker.controller) return; const b = $('#jaunaVersija'); b.hidden = false;
+      $('#atjaunotVersiju').onclick = () => { if (sinh.aiznemts()) { toast('Pagaidi, kamēr beidzas sinhronizācija'); return; } w.postMessage('atjaunot'); }; };
+    radit(reg.waiting);
+    reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed') radit(w); }); });
+    setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+  }).catch(() => { /* bez servisa skripta rīks strādā tāpat */ });
+}
 (async function sakt() {
   try {
     const { gadi } = await (await fetch('rules/index.json')).json();

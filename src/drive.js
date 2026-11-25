@@ -87,6 +87,12 @@ export async function atrastFailu(nosaukums, mapesId) {
   return r.files?.[0] || null;
 }
 
+/** Faili mapē (jaunākie pirmie), piem., rezerves kopijas. */
+export async function failiMape(mapesId) {
+  const r = await pieprasit(`${API}/files?q=${encodeURIComponent(`'${q(mapesId)}' in parents and trashed=false and mimeType!='${MAPE}'`)}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=60&spaces=drive`);
+  return r.files || [];
+}
+
 export async function metadati(id) {
   const m = await pieprasit(`${API}/files/${encodeURIComponent(id)}?fields=id,version,modifiedTime,trashed`);
   if (m.trashed) throw new DriveKluda('Datu fails Google Drive ir izmests miskastē.', 'nav');
