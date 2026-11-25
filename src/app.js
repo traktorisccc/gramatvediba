@@ -1091,9 +1091,9 @@ function skatsIestatijumi(v) {
 
 // ---------- Maršruti un sākums ----------
 const SKATI = { parskats: skatsParskats, rekini: skatsRekini, ligumi: skatsLigumi, banka: skatsBanka, zurnals: skatsZurnals, ceturksnis: skatsCeturksnis, deklaracija: skatsDeklaracija, iestatijumi: skatsIestatijumi };
-/** Sākuma ekrāns: ja grāmatvedība piesaistīta Drive, vispirms pieslēdzas, lai strādātu ar jaunākajiem datiem. */
+/** Sākuma ekrāns: katrā sesijā vispirms piedāvā pieslēgties Drive; darbs bez Drive ir papildu izvēle. */
 const BEZ_DRIVE = 'gramatvediba:bez-drive';
-const jaradaSakums = () => !!driveMeta().konts && !drive.irAtslega() && !sessionStorage.getItem(BEZ_DRIVE);
+const jaradaSakums = () => !drive.irAtslega() && !sessionStorage.getItem(BEZ_DRIVE);
 function sakumaEkrans(v) {
   const m = driveMeta();
   document.body.classList.add('sakums');
@@ -1101,7 +1101,7 @@ function sakumaEkrans(v) {
     <p>Pieslēdzies Google Drive, lai strādātu ar jaunākajiem datiem no visām ierīcēm.</p>
     ${driveKluda ? `<p style="color:var(--warn)">${h(driveKluda)}</p>` : ''}
     <p><button class="primary" id="sPieslegt" style="font-size:1.05rem;padding:12px 22px">Pieslēgties Google Drive</button></p>
-    <p class="note" style="margin:0 0 14px">${h(m.konts)}${m.mainits ? ' · šajā pārlūkā ir izmaiņas, kas vēl nav Drive: pieslēdzoties tās tiks apvienotas' : ''}</p>
+    <p class="note" style="margin:0 0 14px">${m.konts ? h(m.konts) : 'Pirmā pieslēgšana šajā pārlūkā: ja Drive jau ir dati no citas ierīces, tie tiks apvienoti ar šejienes datiem'}${m.konts && m.mainits ? ' · šajā pārlūkā ir izmaiņas, kas vēl nav Drive: pieslēdzoties tās tiks apvienotas' : ''}</p>
     <button class="link" id="sBez">Strādāt bez Drive</button></div>`;
   $('#sPieslegt').onclick = async () => { await pieslegtDrive(); if (drive.irAtslega()) { document.body.classList.remove('sakums'); radit(); } else radit(); };
   $('#sBez').onclick = () => { sessionStorage.setItem(BEZ_DRIVE, '1'); document.body.classList.remove('sakums'); radit(); raditDriveStatusu(); };

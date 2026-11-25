@@ -1,6 +1,6 @@
 // Servisa skripts: rīka faili tiek glabāti kā viena versija. Jauna versija tiek ielādēta fonā un ieslēgta tikai tad,
 // kad lietotājs spiež „Atjaunot” — tāpēc vecie un jaunie faili nekad nesajaucas. Dati šeit netiek glabāti (tie ir pārlūkā un Drive).
-const VERSIJA = '2026-11-25.1';
+const VERSIJA = '2026-11-25.2';
 const KESS = `gramatvediba-${VERSIJA}`;
 const FAILI = [
   './', 'index.html', 'privatums.html', 'manifest.json',
